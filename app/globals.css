@@ -1,26 +1,141 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+  Palette — white + green (light) / forest night (dark)
+  ------------------------------------------------------------
+  background  page                 #FFFFFF / #07120C
+  surface     soft panels          #F3FAF5 / #0D1D14
+  card        windows, slides      #FFFFFF / #0F2117
+  ink         text                 #0B1F14 / #E6F2EA
+  muted       secondary text       #5C6F63 / #93A99B
+  line        borders              #E1ECE4 / #1D3326
+  brand-600   primary green (buttons, highlights) — same in both
+  brand-800   deep forest (dark cards) — same in both
+  The tint steps (50–200) and the text step (700) flip in dark mode.
+  The story's dark world (dive → dashboard → CTA → footer) is dark in both themes.
+*/
+@theme {
+  --color-background: #ffffff;
+  --color-surface: #f3faf5;
+  --color-card: #ffffff;
+  --color-ink: #0b1f14;
+  --color-muted: #5c6f63;
+  --color-line: #e1ece4;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-brand-50: #effdf3;
+  --color-brand-100: #dcfce6;
+  --color-brand-200: #bbf7d0;
+  --color-brand-300: #86efac;
+  --color-brand-400: #4ade80;
+  --color-brand-500: #22c55e;
+  --color-brand-600: #16a34a;
+  --color-brand-700: #15803d;
+  --color-brand-800: #14532d;
+  --color-brand-900: #0b2e1a;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display-face);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Dark theme: set on <html> before first paint by the inline script in layout.tsx. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-background: #07120c;
+  --color-surface: #0d1d14;
+  --color-card: #0f2117;
+  --color-ink: #e6f2ea;
+  --color-muted: #93a99b;
+  --color-line: #1d3326;
+  --color-brand-50: #0f2a1b;
+  --color-brand-100: #12331f;
+  --color-brand-200: #1a4a2d;
+  --color-brand-700: #4ade80;
+}
+
+html {
+  scrollbar-color: var(--color-brand-300) transparent;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-ink);
 }
+
+.pin-spacer,
+.pin-spacer > * {
+  max-width: 100% !important;
+}
+
+/* Scroll areas inside the UI (dashboard panel) get a quiet, thin bar. */
+.scroll-quiet {
+  /* its scrolling never spills over into the page (the story steps scenes instead) */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+
+::selection {
+  background: var(--color-brand-200);
+  color: var(--color-ink);
+}
+
+.hero-grid {
+  --cell: 56px;
+  --rule: color-mix(in oklab, var(--color-brand-700) 13%, transparent);
+  background-image:
+    linear-gradient(to right, var(--rule) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--rule) 1px, transparent 1px);
+  background-size: var(--cell) var(--cell);
+  background-position: calc(50% - var(--cell) / 2) 0;
+  mask-image: radial-gradient(ellipse 70% 72% at 42% 48%, #000 30%, transparent 78%);
+}
+:root[data-theme="dark"] .hero-grid {
+  --rule: color-mix(in oklab, var(--color-brand-700) 9%, transparent);
+}
+
+/* Navbar tones: light over the hero, dark over the dark ending and footer. */
+.nav-shell {
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease;
+}
+.nav-shell .nav-logo,
+.nav-shell .nav-link {
+  transition: color 0.3s ease;
+}
+[data-nav][data-tone="dark"] {
+  background-color: rgb(3 16 10 / 0.72);
+  border-color: rgb(255 255 255 / 0.08);
+}
+[data-nav][data-tone="dark"] .nav-logo {
+  color: #fff;
+}
+[data-nav][data-tone="dark"] .nav-link {
+  color: rgb(255 255 255 / 0.72);
+}
+[data-nav][data-tone="dark"] .nav-link:hover {
+  color: var(--color-brand-300);
+}
+
+/* Theme toggle: show the icon for the theme you would switch TO. */
+.theme-icon-sun {
+  display: none;
+}
+:root[data-theme="dark"] .theme-icon-sun {
+  display: block;
+}
+:root[data-theme="dark"] .theme-icon-moon {
+  display: none;
+}
+
+/* Scroll cue: a short bead travelling down a hairline. */
+@keyframes cue {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(200%);
+  }
+}
+
