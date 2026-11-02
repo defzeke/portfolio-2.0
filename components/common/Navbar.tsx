@@ -15,7 +15,7 @@ export default function Navbar() {
       className="nav-shell fixed inset-x-0 top-0 z-50 border-b border-line/70 bg-background/80 backdrop-blur-md"
     >
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <a href="#top" className="nav-logo font-display text-xl font-extrabold tracking-[-0.03em] text-ink">
+        <a href="#top" className="nav-logo inline-flex min-h-11 items-center font-display text-xl font-extrabold tracking-[-0.03em] text-ink">
           zeke<span className="text-brand-600">.</span>
         </a>
         <ul className="hidden items-center gap-8 text-sm sm:flex">

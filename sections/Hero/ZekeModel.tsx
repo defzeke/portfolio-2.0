@@ -6,7 +6,7 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { fixClips } from "./clipFixes";
 
-const MODEL_URL = "/models/zeke_rigged_web.glb";
+const MODEL_URL = "/models/zeke.glb";
 
 // How far (radians) the head/body may turn toward the cursor.
 const MAX_YAW = 0.7;
@@ -36,8 +36,7 @@ export const CAMERA_BASE = { pos: new THREE.Vector3(0, 0.95, 3.6), target: new T
 // ≈ mid-thigh, head in the top fifth), so he's grounded rather than floating.
 // Dollies in from `from` to `to` as the scene reveals.
 const CAMERA_BUST = { y: 1.13, targetY: 1.08, from: 2.85, to: 2.6 };
-// Centre of the mouth in bind pose (from the GLB's teeth/mouth bounds).
-const MOUTH_BIND = new THREE.Vector3(0.016, 1.065, 0.17);
+const FACE = new THREE.Vector3(0.016, 1.12, 0.17);
 
 export type Reaction = "Talk" | "Laugh" | "Wave";
 
@@ -60,6 +59,12 @@ export type ZekeRig = {
   pull: number;
   /** Lowers the camera + aim (world units): moves him up the screen. */
   lift: number;
+  /** 0 → 1: close-up on his face (chat). */
+  face: number;
+  /** Camera distance from the face in the close-up. */
+  faceDist: number;
+  /** Aims below the face so it sits higher on screen (phones). */
+  faceLift: number;
 };
 
 export type ZekeModelProps = {
@@ -158,18 +163,16 @@ export default function ZekeModel({
   const mouthAnchor = useRef<THREE.Object3D | null>(null);
   useEffect(() => {
     const head = bones.head as THREE.Bone | null;
-    let skinned: THREE.SkinnedMesh | undefined;
-    scene.traverse((o) => {
-      if (!skinned && (o as THREE.SkinnedMesh).isSkinnedMesh) skinned = o as THREE.SkinnedMesh;
-    });
-    if (!head || !skinned) return;
-    const index = skinned.skeleton.bones.indexOf(head);
+    // The upper teeth mark the mouth. Measured from the mesh itself so it holds for
+    // quantized/compressed exports, whose bind matrices fold in a dequantize transform.
+    const teeth = meshesOf(scene, "Teeth_Upper")[0] as THREE.SkinnedMesh | undefined;
+    if (!head || !teeth?.isSkinnedMesh) return;
+    const index = teeth.skeleton.bones.indexOf(head);
     if (index < 0) return;
+    teeth.geometry.computeBoundingBox();
     const anchor = new THREE.Object3D();
-    anchor.position
-      .copy(MOUTH_BIND)
-      .applyMatrix4(skinned.bindMatrix)
-      .applyMatrix4(skinned.skeleton.boneInverses[index]);
+    teeth.geometry.boundingBox!.getCenter(anchor.position);
+    anchor.position.applyMatrix4(teeth.bindMatrix).applyMatrix4(teeth.skeleton.boneInverses[index]);
     head.add(anchor);
     mouthAnchor.current = anchor;
     return () => {
@@ -400,30 +403,37 @@ export default function ZekeModel({
     if (!play) return;
     const delta = Math.min(rawDelta, 0.1); // avoid jumps after tab switches
     const a = anim.current;
-    const rig = rigRef?.current ?? { zoom: 0, bust: 0, turn: 0, outro: 0, pull: 0, lift: 0 };
+    const rig = rigRef?.current ?? { zoom: 0, bust: 0, turn: 0, outro: 0, pull: 0, lift: 0, face: 0, faceDist: 1, faceLift: 0 };
     const diving = rig.bust === 0 && rig.zoom > 0;
+    const chatting = rig.face > 0;
     a.clock += delta;
 
     // 1. Animation clips write the bone poses + face morphs.
     director.current?.blend(delta);
     mixer.update(delta);
-    director.current?.tick(!diving);
+    director.current?.tick(!diving && !chatting);
 
     // 2. Mouth interior follows the jaw; the dive opens the mouth as the camera closes in.
     syncMouth.current?.(diving ? smoothstep(0.1, 0.6, rig.zoom) * 0.9 : 0);
 
     // 3. Cursor follow — ONLY while idle. Any clip with its own head motion (entrance,
     //    gestures, Talk, Laugh) and the dive switch it off, or the two rotations fight.
-    const following = !diving && a.mode === "idle";
+    const following = !diving && !chatting && a.mode === "idle";
     const l = look.current;
     const ease = 1 - Math.exp(-delta * 6);
     // Follow fades out at least as fast as Idle hands the pose to another clip, so the
     // look-at never stacks on top of a clip's own head motion.
-    l.weight += ((following ? a.idleWeight : 0) - l.weight) * (1 - Math.exp(-delta * 8));
+    // Fade in slowly (no whip back to the cursor after a clip), fade out fast.
+    const targetWeight = following ? a.idleWeight : 0;
+    const rate = targetWeight > l.weight ? 2 : 8;
+    l.weight += (targetWeight - l.weight) * (1 - Math.exp(-delta * rate));
     if (!following) l.weight = Math.min(l.weight, a.idleWeight);
     // The body may be turned (`rig.turn`); aim the head in world terms, relative to that turn.
-    l.yaw += (pointer.current.x * MAX_YAW - rig.turn - l.yaw) * ease;
-    l.pitch += (-pointer.current.y * MAX_PITCH - l.pitch) * ease;
+    // Turn speed is capped so a fast flick never snaps the head.
+    const maxStep = 2.5 * delta;
+    const clampStep = (v: number) => Math.max(-maxStep, Math.min(maxStep, v));
+    l.yaw += clampStep((pointer.current.x * MAX_YAW - rig.turn - l.yaw) * ease);
+    l.pitch += clampStep((-pointer.current.y * MAX_PITCH - l.pitch) * ease);
 
     const yaw = l.yaw * l.weight;
     const pitch = l.pitch * l.weight;
@@ -468,6 +478,11 @@ export default function ZekeModel({
     if (rig.pull || rig.lift) {
       camPos.add(tmp.corner.set(0, -rig.lift, rig.pull));
       camTarget.setY(camTarget.y - rig.lift);
+    }
+    if (chatting) {
+      const y = FACE.y - rig.faceLift;
+      camPos.lerp(tmp.corner.set(FACE.x, y + 0.02, FACE.z + rig.faceDist), rig.face);
+      camTarget.lerp(tmp.corner.set(FACE.x, y, FACE.z), rig.face);
     }
     camera.position.copy(camPos);
     camera.lookAt(camTarget);

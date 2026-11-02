@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import {
   blogCategories,
   blogs,
   experience,
   experienceCategories,
+  featured,
+  now,
   projectCategories,
   projects,
-  stats,
   testimonials,
   type BlogCategory,
   type ExperienceCategory,
@@ -43,38 +44,63 @@ export default function Dashboard({
   onInsight?: Insight;
 }) {
   const [view, setView] = useState<View>("overview");
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const open = (v: View) => {
     setView(v);
     onInsight?.(v);
   };
+  const onTabKey = (e: KeyboardEvent<HTMLUListElement>) => {
+    const i = nav.findIndex((n) => n.id === view);
+    const keys: Record<string, number> = {
+      ArrowRight: i + 1,
+      ArrowDown: i + 1,
+      ArrowLeft: i - 1,
+      ArrowUp: i - 1,
+      Home: 0,
+      End: nav.length - 1,
+    };
+    if (!(e.key in keys)) return;
+    e.preventDefault();
+    const next = (keys[e.key] + nav.length) % nav.length;
+    open(nav[next].id);
+    tabs.current[next]?.focus();
+    tabs.current[next]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  };
 
   return (
     <div
-      className={`@container/window flex flex-col overflow-hidden rounded-3xl bg-card shadow-[0_40px_90px_-30px_rgba(0,0,0,0.6)] ${className}`}
+      className={`@container/window flex flex-col overflow-hidden rounded-3xl bg-card shadow-[0_40px_90px_-30px_rgba(0,0,0,0.6)] ring-1 ring-line ${className}`}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-line px-5 py-3">
-        <span className="size-3 rounded-full bg-brand-200" />
-        <span className="size-3 rounded-full bg-brand-300" />
-        <span className="size-3 rounded-full bg-brand-500" />
-        <span className="ml-3 font-mono text-xs text-muted">zeke / {view}</span>
+      <div className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3">
+        <span className="font-display text-base font-extrabold tracking-[-0.03em] text-ink">
+          zeke<span className="text-brand-600">.</span>
+        </span>
+        <span className="text-sm text-muted">/ {nav.find((n) => n.id === view)?.label}</span>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr] @3xl/window:grid-cols-[180px_minmax(0,1fr)] @3xl/window:grid-rows-1">
         <aside className="min-w-0 border-b border-line p-3 @3xl/window:border-b-0 @3xl/window:border-r">
           <ul
-            className="-mx-1 flex gap-1 overflow-x-auto px-1 [scrollbar-width:none] @3xl/window:mx-0 @3xl/window:flex-col @3xl/window:overflow-visible @3xl/window:px-0"
+            className="-mx-1 flex gap-1 overflow-x-auto px-1 [mask-image:linear-gradient(to_right,#000_82%,transparent)] [scrollbar-width:none] @3xl/window:mx-0 @3xl/window:flex-col @3xl/window:overflow-visible @3xl/window:px-0 @3xl/window:[mask-image:none]"
             role="tablist"
             aria-label="Dashboard views"
+            onKeyDown={onTabKey}
           >
-            {nav.map((n) => {
+            {nav.map((n, i) => {
               const active = view === n.id;
               return (
-                <li key={n.id} className="flex-none @xl/window:flex-1 @3xl/window:flex-none">
+                <li key={n.id} role="presentation" className="flex-none @xl/window:flex-1 @3xl/window:flex-none">
                   <button
+                    ref={(el) => {
+                      tabs.current[i] = el;
+                    }}
+                    id={`tab-${n.id}`}
                     role="tab"
                     aria-selected={active}
+                    aria-controls="dashboard-panel"
+                    tabIndex={active ? 0 : -1}
                     onClick={() => open(n.id)}
-                    className={`flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm transition-colors @3xl/window:justify-start @3xl/window:gap-3 @3xl/window:px-3 ${
+                    className={`flex min-h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm transition-colors @3xl/window:justify-start @3xl/window:gap-3 ${
                       active
                         ? "bg-brand-50 font-medium text-brand-700"
                         : "text-muted hover:bg-surface hover:text-ink"
@@ -89,7 +115,13 @@ export default function Dashboard({
           </ul>
         </aside>
 
-        <div className="scroll-quiet @container min-h-0 overflow-y-auto overscroll-contain p-5 @3xl/window:p-7" role="tabpanel">
+        <div
+          id="dashboard-panel"
+          role="tabpanel"
+          aria-labelledby={`tab-${view}`}
+          tabIndex={0}
+          className="scroll-quiet @container min-h-0 overflow-y-auto overscroll-contain p-5 @3xl/window:p-7"
+        >
           {view === "overview" && <Overview onOpen={open} />}
           {view === "projects" && <Projects onInsight={onInsight} />}
           {view === "experience" && <Experience onInsight={onInsight} />}
@@ -103,79 +135,60 @@ export default function Dashboard({
 
 function Overview({ onOpen }: { onOpen: (v: View) => void }) {
   return (
-    <div>
-      <div className="grid grid-cols-2 gap-3 @lg:grid-cols-4">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-2xl border border-line p-4">
-            <p className="text-xs text-muted">{s.label}</p>
-            <p className="mt-2 text-3xl font-semibold tracking-tight">{s.value}</p>
-          </div>
-        ))}
-      </div>
+    <div className="grid gap-8 @3xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] @3xl:gap-10">
+      <article>
+        <div className="ph-grid aspect-[2/1] rounded-2xl" aria-hidden />
+        <p className="mt-5 text-xs font-medium uppercase tracking-wider text-brand-700">
+          Featured · {featured.category}
+        </p>
+        <h3 className="mt-1.5 font-display text-2xl font-bold tracking-[-0.02em] text-ink @2xl:text-3xl">
+          {featured.title}
+        </h3>
+        <p className="mt-2 max-w-[56ch] leading-7 text-muted">{featured.body}</p>
+        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
+          <button
+            type="button"
+            onClick={() => onOpen("projects")}
+            className="inline-flex min-h-11 items-center gap-2 rounded-full bg-action px-5 text-sm font-medium text-white transition-colors hover:bg-action-hover"
+          >
+            See all projects
+            <Icon d="M5 12h14M13 6l6 6-6 6" />
+          </button>
+          <span className="text-sm text-muted">{featured.tags.join(" · ")}</span>
+        </div>
+      </article>
 
-      <div className="mt-4 grid gap-3 @lg:grid-cols-2">
-        <CategoryCard
-          title="Projects"
-          body="Lorem ipsum dolor sit amet, consectetur adipiscing elit."
-          items={projectCategories}
-          onClick={() => onOpen("projects")}
-          dark
-        />
-        <CategoryCard
-          title="Experience"
-          body="Sed do eiusmod tempor incididunt ut labore et dolore."
-          items={experienceCategories}
-          onClick={() => onOpen("experience")}
-        />
+      <div className="flex flex-col gap-8">
+        <section aria-labelledby="now-heading">
+          <h3 id="now-heading" className="text-sm font-medium text-ink">
+            Right now
+          </h3>
+          <dl className="mt-3 divide-y divide-line border-y border-line">
+            {now.map((n) => (
+              <div key={n.label} className="flex items-baseline justify-between gap-4 py-3 text-sm">
+                <dt className="text-muted">{n.label}</dt>
+                <dd className="text-right font-medium text-ink">{n.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+        <nav aria-label="More from Zeke" className="flex flex-col">
+          {(["experience", "blogs"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onOpen(v)}
+              className="group flex min-h-11 items-center justify-between border-b border-line py-3 text-left font-medium text-ink transition-colors hover:text-brand-700"
+            >
+              {nav.find((n) => n.id === v)?.label}
+              <span className="transition-transform group-hover:translate-x-1">
+                <Icon d="M5 12h14M13 6l6 6-6 6" />
+              </span>
+            </button>
+          ))}
+        </nav>
       </div>
     </div>
-  );
-}
-
-function CategoryCard({
-  title,
-  body,
-  items,
-  onClick,
-  dark = false,
-}: {
-  title: string;
-  body: string;
-  items: readonly string[];
-  onClick: () => void;
-  dark?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`group flex flex-col rounded-2xl p-6 text-left transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${
-        dark ? "bg-brand-800 text-white" : "border border-brand-200 bg-brand-50 text-ink"
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-semibold">{title}</h3>
-        <span
-          className={`flex size-9 items-center justify-center rounded-full transition-transform group-hover:translate-x-1 ${
-            dark ? "bg-white/10" : "bg-card"
-          }`}
-        >
-          <Icon d="M5 12h14M13 6l6 6-6 6" />
-        </span>
-      </div>
-      <p className={`mt-2 text-sm leading-6 ${dark ? "text-white/75" : "text-muted"}`}>{body}</p>
-      <div className="mt-6 flex flex-wrap gap-2">
-        {items.map((i) => (
-          <span
-            key={i}
-            className={`rounded-full px-3 py-1 text-xs ${
-              dark ? "bg-white/10 text-brand-300" : "bg-card text-brand-700"
-            }`}
-          >
-            {i}
-          </span>
-        ))}
-      </div>
-    </button>
   );
 }
 
@@ -192,9 +205,9 @@ function Projects({ onInsight }: { onInsight?: Insight }) {
       <Filters options={["All", ...projectCategories]} value={filter} onChange={pick} />
       <div className="mt-6 grid gap-3 @sm:grid-cols-2 @3xl:grid-cols-3">
         {shown.map((p) => (
-          <article key={p.title} className="flex flex-col rounded-2xl border border-line p-4">
-            <div className="aspect-[16/10] rounded-xl bg-gradient-to-br from-brand-100 to-brand-300" />
-            <p className="mt-4 font-mono text-[11px] uppercase tracking-wider text-brand-600">
+          <article key={p.title} className="flex flex-col">
+            <div className="ph-grid aspect-[16/10] rounded-xl" aria-hidden />
+            <p className="mt-4 text-xs font-medium uppercase tracking-wider text-brand-700">
               {p.category}
             </p>
             <h3 className="mt-1 font-semibold">{p.title}</h3>
@@ -224,12 +237,9 @@ function Experience({ onInsight }: { onInsight?: Insight }) {
   return (
     <div>
       <Filters options={["All", ...experienceCategories]} value={filter} onChange={pick} />
-      <ol className="mt-6 space-y-3">
+      <ol className="mt-6 divide-y divide-line border-y border-line">
         {shown.map((e) => (
-          <li
-            key={e.role + e.org}
-            className="grid gap-2 rounded-2xl border border-line p-5 @lg:grid-cols-[140px_1fr]"
-          >
+          <li key={e.role + e.org} className="grid gap-2 py-5 @lg:grid-cols-[140px_1fr]">
             <div>
               <p className="font-mono text-xs text-muted">{e.period}</p>
               <span className="mt-2 inline-block rounded-full bg-brand-50 px-2.5 py-0.5 text-xs text-brand-700">
@@ -301,7 +311,7 @@ function Testimonials() {
         <Person name={featured.name} role={featured.role} dark />
       </figure>
       {rest.map((t) => (
-        <figure key={t.name} className="flex flex-col justify-between gap-6 rounded-2xl border border-line p-5">
+        <figure key={t.name} className="flex flex-col justify-between gap-6 rounded-2xl bg-surface p-5">
           <blockquote className="text-pretty leading-7 text-ink">
             <QuoteMark className="mb-3 size-6 text-brand-300" />
             {t.quote}
@@ -361,9 +371,9 @@ function Filters<T extends string>({
           key={o}
           onClick={() => onChange(o)}
           aria-pressed={value === o}
-          className={`min-h-10 rounded-full px-4 py-2 text-sm transition-colors ${
+          className={`min-h-11 rounded-full px-4 py-2 text-sm transition-colors ${
             value === o
-              ? "bg-brand-600 text-white"
+              ? "bg-action text-white"
               : "border border-line text-muted hover:border-brand-300 hover:text-ink"
           }`}
         >

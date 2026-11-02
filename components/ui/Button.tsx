@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 type Variant = "primary" | "outline" | "light";
 
 const styles: Record<Variant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700",
+  primary: "bg-action text-white hover:bg-action-hover",
   outline: "border border-line text-ink hover:border-brand-600 hover:text-brand-700",
   light: "bg-white text-brand-800 hover:bg-brand-50",
 };

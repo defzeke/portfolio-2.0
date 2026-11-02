@@ -27,11 +27,18 @@ export const experience: {
   { role: "Incididunt ut", org: "Labore Society", period: "2021 — 2023", category: "Leadership", body: "Sunt in culpa qui officia deserunt mollit anim." },
 ];
 
-export const stats = [
-  { label: "Lorem ipsum", value: "12+" },
-  { label: "Dolor sit", value: "04" },
-  { label: "Amet elit", value: "30k" },
-  { label: "Tempor", value: "99%" },
+// Overview: the one project to open first, and what's going on right now (placeholder copy).
+export const featured = {
+  title: "Lorem ipsum dolor",
+  category: "Web" as ProjectCategory,
+  body: "Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+  tags: ["Lorem", "Ipsum", "Dolor"],
+};
+
+export const now = [
+  { label: "Building", value: "Lorem ipsum dolor sit" },
+  { label: "Learning", value: "Consectetur adipiscing" },
+  { label: "Open to", value: "Sed do eiusmod tempor" },
 ];
 
 export const testimonials: { quote: string; name: string; role: string }[] = [

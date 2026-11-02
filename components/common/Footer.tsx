@@ -5,7 +5,7 @@ const navigate = [
 ];
 
 const elsewhere = [
-  { label: "GitHub", href: "#" },
+  { label: "GitHub", href: "https://github.com/defzeke" },
   { label: "LinkedIn", href: "#" },
   { label: "Dribbble", href: "#" },
 ];
@@ -20,7 +20,7 @@ export default function Footer() {
           <div>
             <a
               href={`mailto:${EMAIL}`}
-              className="group inline-flex items-center gap-3 font-display text-[clamp(1.9rem,4vw,3.25rem)] font-bold leading-none tracking-[-0.025em] transition-colors hover:text-brand-300"
+              className="group inline-flex min-h-11 items-center gap-3 py-1 font-display text-[clamp(1.9rem,4vw,3.25rem)] font-bold leading-none tracking-[-0.025em] transition-colors hover:text-brand-300"
             >
               {EMAIL}
               <svg
@@ -50,10 +50,10 @@ export default function Footer() {
           <p>© 2026 Ezekiel. Lorem ipsum dolor sit amet.</p>
           <a
             href="#top"
-            className="group inline-flex items-center gap-2 text-white/75 transition-colors hover:text-brand-300"
+            className="group inline-flex min-h-11 items-center gap-2 text-white/75 transition-colors hover:text-brand-300"
           >
             Back to top
-            <span className="flex size-8 items-center justify-center rounded-full border border-white/15 transition-colors group-hover:border-brand-300">
+            <span className="flex size-10 items-center justify-center rounded-full border border-white/15 transition-colors group-hover:border-brand-300">
               <svg
                 aria-hidden
                 viewBox="0 0 24 24"
@@ -93,13 +93,13 @@ function FooterList({
   return (
     <nav aria-label={title}>
       <h2 className="text-sm text-white/50">{title}</h2>
-      <ul className="mt-4 space-y-3">
+      <ul className="mt-2">
         {items.map((i) => (
           <li key={i.label}>
             <a
               href={i.href}
-              {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              className="text-lg text-white/85 transition-colors hover:text-brand-300"
+              {...(external && i.href !== "#" ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              className="inline-flex min-h-11 items-center text-lg text-white/85 transition-colors hover:text-brand-300"
             >
               {i.label}
             </a>

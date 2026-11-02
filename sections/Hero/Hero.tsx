@@ -10,6 +10,7 @@ import Dashboard from "@/sections/Dashboard/Dashboard";
 import { insights, type InsightKey } from "@/sections/Dashboard/data";
 import HeroCanvas from "./HeroCanvas";
 import Subtitle from "./Subtitle";
+import ZekeChat from "./ZekeChat";
 import type { Reaction, ZekeControls, ZekeRig } from "./ZekeModel";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger, ScrollToPlugin);
@@ -18,6 +19,32 @@ gsap.registerPlugin(useGSAP, ScrollTrigger, ScrollToPlugin);
 ScrollTrigger.config({ ignoreMobileResize: true });
 
 const NAME = "zeke";
+
+// Scroll lock that never hides the scrollbar (hiding it narrows the page and makes the
+// model jump). Blocks scroll input and holds the position instead.
+const lockKeys = new Set([" ", "PageDown", "PageUp", "ArrowDown", "ArrowUp", "Home", "End"]);
+let lockedAt: number | null = null;
+const blockInput = (e: Event) => {
+  if (e instanceof KeyboardEvent) {
+    const el = e.target as HTMLElement | null;
+    if (!lockKeys.has(e.key) || el?.closest("input, textarea, [contenteditable]")) return;
+  } else if ((e.target as HTMLElement | null)?.closest?.(".scroll-quiet")) return;
+  e.preventDefault();
+};
+const holdPosition = () => {
+  if (lockedAt !== null && window.scrollY !== lockedAt) window.scrollTo(0, lockedAt);
+};
+function lockScroll(on: boolean) {
+  const root = document.documentElement;
+  if (on === (lockedAt !== null)) return;
+  lockedAt = on ? window.scrollY : null;
+  if (on) root.dataset.scrollLocked = "";
+  else delete root.dataset.scrollLocked;
+  const method = on ? "addEventListener" : "removeEventListener";
+  for (const t of ["wheel", "touchmove"]) window[method](t, blockInput, { passive: false });
+  window[method]("keydown", blockInput);
+  window[method]("scroll", holdPosition);
+}
 
 // Short personal facts for the about panel (placeholder copy).
 const aboutFacts = [
@@ -36,8 +63,13 @@ const AUTO_ADVANCE_DURATION = 2.6;
 const SCRUB_SMOOTHING = 1.2;
 const SETTLE_THRESHOLD = 0.04;
 const SCROLL_PER_UNIT = 1.2;
+// The intro never waits longer than this for the 3D model; he drops in when he arrives.
+const MODEL_WAIT = 2.5;
+const SEEN_KEY = "zeke:seen";
 const MOBILE_ASIDE = { pull: 4.2, lift: 0.96 }; // intro/about: full body in the top ~40%
 const MOBILE_BUST = { pull: 6.3, lift: 1.55 }; // dashboard/CTA: waist-up above the window
+const FACE_DESKTOP = { faceDist: 1.9, faceLift: 0.09 };
+const FACE_PHONE = { faceDist: 3, faceLift: 0.33 };
 
 type Scene = "intro" | "about" | "moving" | "center" | "dive" | "dash" | "thanks" | "cta";
 const SCENES: [number, Scene][] = [
@@ -72,10 +104,30 @@ export default function Hero() {
   const slide = useRef<HTMLDivElement>(null);
   const ctaSlot = useRef<HTMLDivElement>(null);
   const floor = useRef<HTMLDivElement>(null);
+  const textLayer = useRef<HTMLDivElement>(null);
+  const chatBtn = useRef<HTMLButtonElement>(null);
+  const chatLayer = useRef<HTMLDivElement>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const stageX = useRef(0);
+  const turnBefore = useRef(0);
+  const opener = useRef<HTMLElement | null>(null);
+  const dashLayer = useRef<HTMLDivElement>(null);
+  const ctaInner = useRef<HTMLDivElement>(null);
+  const reserve = useRef<HTMLDivElement>(null);
 
   const [play, setPlay] = useState(false);
   const model = useRef<ZekeControls | null>(null);
-  const rig = useRef<ZekeRig>({ zoom: 0, bust: 0, turn: 0, outro: 0, pull: 0, lift: 0 });
+  const rig = useRef<ZekeRig>({
+    zoom: 0,
+    bust: 0,
+    turn: 0,
+    outro: 0,
+    pull: 0,
+    lift: 0,
+    face: 0,
+    faceDist: 1,
+    faceLift: 0,
+  });
 
   // Subtitle: what he says about whatever was pressed in the dashboard.
   const [line, setLine] = useState({ text: insights.overview, cue: 0 });
@@ -94,16 +146,26 @@ export default function Hero() {
   useGSAP(
     (_, contextSafe) => {
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const html = document.documentElement;
       const nav = document.querySelector<HTMLElement>("[data-nav]");
-      const flags = { nameShown: false, modelReady: false, exited: false, aside: false, scroll: false };
+      const flags = {
+        nameShown: false,
+        modelReady: false,
+        waited: false,
+        exited: false,
+        aside: false,
+        scroll: false,
+      };
+      let seen = false;
+      try {
+        seen = sessionStorage.getItem(SEEN_KEY) === "1";
+      } catch {}
       let onAnchorClick: ((e: MouseEvent) => void) | null = null;
       let removeLinkRelease: (() => void) | null = null;
 
       // Always start at the top with scrolling locked until the intro is done.
       history.scrollRestoration = "manual";
       window.scrollTo(0, 0);
-      html.style.overflow = "hidden";
+      lockScroll(true);
 
       gsap.set(
         [
@@ -117,6 +179,8 @@ export default function Hero() {
           ctaPanel.current,
           slide.current,
           floor.current,
+          chatBtn.current,
+          chatLayer.current,
         ],
         { autoAlpha: 0 },
       );
@@ -163,7 +227,8 @@ export default function Hero() {
       // 4. The pinned scroll story.
       const enableScroll = contextSafe!(() => {
         flags.scroll = true;
-        html.style.overflow = "";
+        lockScroll(false);
+        gsap.set(reserve.current, { display: "none" });
         let scene: Scene = "intro";
         let travel: gsap.core.Tween | null = null;
         let travelTo: string | null = null;
@@ -199,7 +264,7 @@ export default function Hero() {
         };
 
         // Glide to a scene label (or null: out of the story, into the footer).
-        function goTo(label: string | null, opts: { duration?: number } = {}) {
+        function goTo(label: string | null, opts: { duration?: number; focus?: () => HTMLElement | null | undefined } = {}) {
           const st = tl.scrollTrigger;
           if (!st) return;
           cancelAuto();
@@ -221,6 +286,7 @@ export default function Hero() {
             onComplete: () => {
               restP = label === null ? 1 : tl.labels[label] / tl.duration();
               done();
+              opts.focus?.()?.focus({ preventScroll: true });
             },
             onInterrupt: done,
           });
@@ -231,6 +297,7 @@ export default function Hero() {
           if (!st || travel || window.scrollY < st.start || window.scrollY >= st.end) return;
           const stops = Object.entries(tl.labels)
             .map(([name, time]) => [name, time / tl.duration()] as [string | null, number])
+            .filter(([name]) => name !== "dark")
             .concat([[null, 1]])
             .sort((a, b) => a[1] - b[1]);
           const p = st.progress;
@@ -264,7 +331,8 @@ export default function Hero() {
             invalidateOnRefresh: true,
             // Past the story the page is light again, so the navbar returns.
             onLeave: () => setNav(true, "dark"),
-            onEnterBack: () => setNav(false),
+            onEnterBack: (self) => setNav(self.progress * tl.duration() < NAV_HIDE_AT),
+            onLeaveBack: () => setNav(true),
             onUpdate: (self) => {
               const t = self.progress * tl.duration();
               if (self.progress < 1) setNav(t < NAV_HIDE_AT);
@@ -305,6 +373,7 @@ export default function Hero() {
 
           // about leaves, he walks back to the middle
           .to(about.current, { autoAlpha: 0, y: -50, ease: "power2.in", duration: 0.4 }, 1.1)
+          .to(chatBtn.current, { autoAlpha: 0, duration: 0.2 }, 1.1)
           .fromTo(
             stage.current,
             live(asidePose),
@@ -407,6 +476,15 @@ export default function Hero() {
           .addLabel("cta", AT.cta)
           .to({}, { duration: PIN_END - AT.cta }, AT.cta); // hold before releasing to the footer
 
+        // Keyboard users land inside the scene they jumped to.
+        const focusFor = (label: string): HTMLElement | null | undefined =>
+          ({
+            intro: intro.current?.querySelector<HTMLElement>("h1"),
+            about: about.current?.querySelector<HTMLElement>("h2"),
+            dash: dash.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]'),
+            cta: ctaPanel.current?.querySelector<HTMLElement>("a"),
+          })[label];
+
         // In-page links land on the matching scene of the pinned story.
         const anchors: Record<string, string> = {
           "#top": "intro",
@@ -419,7 +497,7 @@ export default function Hero() {
           const label = link && anchors[link.getAttribute("href") ?? ""];
           if (!label || !tl.scrollTrigger) return;
           e.preventDefault();
-          goTo(label);
+          goTo(label, { focus: () => focusFor(label) });
         };
         document.addEventListener("click", onAnchorClick);
 
@@ -449,33 +527,49 @@ export default function Hero() {
 
       // 3. Drop-in finished: slide aside + reveal intro.
       const entranceDone = contextSafe!(() => {
+        if (flags.aside) return;
         flags.aside = true;
-        const tl = gsap.timeline({ onComplete: enableScroll });
-        tl.to(stage.current, { ...asidePose(), duration: 1.3, ease: "power3.inOut" })
-          .set(intro.current, { autoAlpha: 1 }, "-=0.5")
-          .call(() => model.current?.react("Talk"), undefined, "<")
-          .from(".intro-line", { yPercent: 110, duration: 0.9, ease: "power4.out", stagger: 0.1 }, "<")
+        // Three beats: heading (underline draws with "Ezekiel."), then the paragraph, then
+        // everything you can act on lands together: buttons, navbar, speech bubble, scroll hint.
+        const HEAD = 0.7;
+        const LINE2 = HEAD + 0.12;
+        const COPY = 1.25;
+        const ACT = 1.5;
+        const tl = gsap.timeline({ onComplete: enableScroll, defaults: { ease: "power3.out" } });
+        tl.to(stage.current, { ...asidePose(), duration: 1.2, ease: "power3.inOut" })
+          .set(intro.current, { autoAlpha: 1 }, HEAD)
+          .from(".intro-line", { yPercent: 110, duration: 0.9, ease: "power4.out", stagger: LINE2 - HEAD }, HEAD)
           .fromTo(
             ".intro-underline",
             { strokeDashoffset: 1 },
-            { strokeDashoffset: 0, duration: 0.7, ease: "power2.inOut" },
-            "-=0.35",
+            { strokeDashoffset: 0, duration: 0.9, ease: "power2.inOut" },
+            LINE2,
           )
-          .from(
-            ".intro-fade",
-            { autoAlpha: 0, y: 24, duration: 0.7, ease: "power3.out", stagger: 0.08 },
-            "-=0.6",
+          .call(() => model.current?.react("Talk"), undefined, HEAD + 0.2)
+          .from(".intro-copy", { autoAlpha: 0, y: 20, duration: 0.7 }, COPY)
+          .from(".intro-actions", { autoAlpha: 0, y: 20, duration: 0.7 }, ACT)
+          .fromTo(
+            chatBtn.current,
+            { autoAlpha: 0, y: 8, scale: 0.9, transformOrigin: "0% 100%" },
+            { autoAlpha: 1, y: 0, scale: 1, duration: 0.6, ease: "back.out(1.5)" },
+            ACT,
           )
-          .to(scrollCue.current, { autoAlpha: 1, duration: 0.5 }, "-=0.2");
-        if (nav) tl.to(nav, { yPercent: 0, duration: 0.6, ease: "power3.out" }, "<");
+          .to(scrollCue.current, { autoAlpha: 1, duration: 0.6 }, ACT);
+        if (nav) tl.to(nav, { yPercent: 0, duration: 0.7 }, ACT);
         finish(tl);
       });
 
       // 2. Loader leaves once the name has shown AND the model is ready.
       const tryExit = contextSafe!(() => {
-        if (!flags.nameShown || !flags.modelReady || flags.exited) return;
+        if (!flags.nameShown || !(flags.modelReady || flags.waited) || flags.exited) return;
         flags.exited = true;
-        const tl = gsap.timeline();
+        try {
+          sessionStorage.setItem(SEEN_KEY, "1");
+        } catch {}
+        // Model still loading: show the intro now; he drops in beside it when he arrives.
+        const withoutModel = !flags.modelReady;
+        const tl = gsap.timeline({ onComplete: () => withoutModel && entranceDone() });
+        if (seen) tl.timeScale(1.8);
         tl.to(".loader-bar", { scaleX: 1, duration: 0.4, ease: "power2.inOut" })
           .to(".loader-letter", { yPercent: -115, duration: 0.6, ease: "power3.in", stagger: 0.05 }, "+=0.2")
           .to(".loader-bar-track", { autoAlpha: 0, duration: 0.3 }, "<")
@@ -498,23 +592,74 @@ export default function Hero() {
         onComplete: () => {
           flags.nameShown = true;
           tryExit();
+          gsap.delayedCall(MODEL_WAIT, () => {
+            flags.waited = true;
+            tryExit();
+          });
         },
       });
+      if (seen) tl.timeScale(2.5);
       tl.from(".loader-letter", { yPercent: 115, duration: 0.9, ease: "power4.out", stagger: 0.08 })
         .set(".loader-word", { visibility: "visible" }, 0)
         .fromTo(".loader-bar", { scaleX: 0 }, { scaleX: 0.7, duration: 1.4, ease: "power2.out" }, 0)
-        .to({}, { duration: 0.3 }); // short hold on the name
+        .to({}, { duration: seen ? 0 : 0.3 });
       finish(tl);
 
       return () => {
         window.removeEventListener("resize", onResize);
         if (onAnchorClick) document.removeEventListener("click", onAnchorClick);
         removeLinkRelease?.();
-        html.style.overflow = "";
+        lockScroll(false);
       };
     },
     { scope },
   );
+
+  const chatMotion = (open: boolean, fromHero: boolean) => {
+    const phone = !window.matchMedia("(min-width: 1024px)").matches;
+    if (open) {
+      Object.assign(rig.current, phone ? FACE_PHONE : FACE_DESKTOP);
+      turnBefore.current = rig.current.turn;
+    }
+    lockScroll(open);
+    if (open) stageX.current = Number(gsap.getProperty(stage.current, "x"));
+    const tl = gsap.timeline({ defaults: { overwrite: "auto" } });
+    const layers = [textLayer.current, dashLayer.current, ctaInner.current];
+    tl.to(
+      rig.current,
+      { face: open ? 1 : 0, turn: open ? 0 : turnBefore.current, duration: 1.1, ease: "power3.inOut" },
+      0,
+    )
+      .to(stage.current, { x: open ? 0 : stageX.current, duration: 1.1, ease: "power3.inOut" }, 0)
+      .to(layers, { autoAlpha: open ? 0 : 1, duration: 0.35 }, open ? 0 : 0.6);
+    if (fromHero) {
+      tl.to([chatBtn.current, scrollCue.current], { autoAlpha: open ? 0 : 1, duration: 0.3 }, open ? 0 : 0.7);
+    }
+    if (open) {
+      tl.fromTo(
+        chatLayer.current,
+        { autoAlpha: 0, y: 30 },
+        { autoAlpha: 1, y: 0, duration: 0.6, ease: "power3.out" },
+        0.45,
+      );
+    } else {
+      tl.to(chatLayer.current, { autoAlpha: 0, y: 20, duration: 0.3, ease: "power2.in" }, 0);
+    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) tl.progress(1);
+  };
+  const fromHero = useRef(true);
+  const openChat = (e: React.MouseEvent<HTMLElement>) => {
+    opener.current = e.currentTarget;
+    fromHero.current = e.currentTarget === chatBtn.current;
+    setChatOpen(true);
+    chatMotion(true, fromHero.current);
+  };
+  const closeChat = () => {
+    setChatOpen(false);
+    chatMotion(false, fromHero.current);
+    // wait for the layers to fade back in: a hidden element can't take focus
+    gsap.delayedCall(1, () => opener.current?.focus({ preventScroll: true }));
+  };
 
   return (
     <div ref={scope}>
@@ -524,7 +669,7 @@ export default function Hero() {
         className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background"
         aria-hidden
       >
-        <div className="loader-word invisible flex overflow-hidden pb-[0.08em] font-display text-[clamp(5rem,18vw,12rem)] font-extrabold leading-[0.95] tracking-[-0.03em] text-ink">
+        <div className="loader-word invisible flex overflow-hidden pb-[0.08em] pr-[0.08em] font-display text-[clamp(5rem,18vw,12rem)] font-extrabold leading-[0.95] tracking-[-0.03em] text-ink">
           {NAME.split("").map((c, i) => (
             <span key={i} className="loader-letter inline-block">
               {c}
@@ -583,12 +728,15 @@ export default function Hero() {
           <div ref={leftCol} className="hidden lg:block" />
 
           {/* text panels sit on the right (desktop) or bottom (mobile) */}
-          <div className="relative mt-[47svh] w-full md:mx-auto md:max-w-xl lg:mx-0 lg:mt-0 lg:max-w-none">
+          <div
+            ref={textLayer}
+            className="relative mt-[47svh] w-full md:mx-auto md:max-w-xl lg:mx-0 lg:mt-0 lg:max-w-none"
+          >
             <div
               ref={intro}
               className="invisible absolute inset-0 flex flex-col justify-start lg:justify-center"
             >
-              <h1 className="text-balance font-display text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.98] tracking-[-0.022em]">
+              <h1 tabIndex={-1} className="text-balance font-display outline-none text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.98] tracking-[-0.022em]">
                 <span className="block overflow-hidden pb-[0.06em]">
                   <span className="intro-line block">Hi, my name is</span>
                 </span>
@@ -616,11 +764,11 @@ export default function Hero() {
                   </span>
                 </span>
               </h1>
-              <p className="intro-fade mt-5 max-w-[42ch] text-base leading-7 text-muted sm:text-lg sm:leading-8">
+              <p className="intro-copy mt-5 max-w-[42ch] text-base leading-7 text-muted sm:text-lg sm:leading-8">
                 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
                 incididunt ut labore et dolore magna aliqua.
               </p>
-              <div className="intro-fade mt-8 flex flex-wrap gap-3">
+              <div className="intro-actions mt-8 flex flex-wrap gap-3">
                 <Button href="#work">Lorem ipsum</Button>
                 <Button href="#contact" variant="outline">
                   Dolor sit amet
@@ -632,7 +780,7 @@ export default function Hero() {
               ref={about}
               className="invisible absolute inset-0 flex flex-col justify-start lg:justify-center"
             >
-              <h2 className="about-item text-balance font-display text-[clamp(2.25rem,4.4vw,3.75rem)] font-bold leading-[1.02] tracking-[-0.02em]">
+              <h2 tabIndex={-1} className="about-item text-balance font-display outline-none text-[clamp(2.25rem,4.4vw,3.75rem)] font-bold leading-[1.02] tracking-[-0.02em]">
                 Lorem ipsum dolor sit amet, <span className="text-brand-600">consectetur</span>.
               </h2>
               <p className="about-item mt-6 max-w-[46ch] text-base leading-7 text-muted sm:text-lg sm:leading-8">
@@ -663,18 +811,50 @@ export default function Hero() {
           </span>
         </div>
 
-        <div className="pointer-events-none absolute inset-0">
+        {/* Speech bubble from his head (sits over the model's column) */}
+        <div className="pointer-events-none absolute inset-0 z-20 mx-auto grid max-w-6xl px-6 lg:grid-cols-2">
+          <div className="relative">
+            <button
+              ref={chatBtn}
+              type="button"
+              onClick={openChat}
+              aria-expanded={chatOpen}
+              aria-label="Chat with Zeke"
+              className="chat-bubble invisible pointer-events-auto absolute left-[calc(50%+3.75rem)] top-[11svh] rounded-[1.25rem] rounded-bl-[0.3rem] bg-ink px-4 py-2.5 font-display text-[15px] font-semibold tracking-[-0.01em] whitespace-nowrap text-background shadow-[0_14px_30px_-14px_rgba(11,31,20,0.6)] transition-colors hover:bg-action hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:left-[calc(50%+7.5rem)] lg:top-[19svh] lg:text-base"
+            >
+              <span className="lg:hidden">Talk to me</span>
+              <span className="hidden lg:inline">Psst — talk to me</span>
+            </button>
+          </div>
+        </div>
+
+        <div ref={chatLayer} className="invisible pointer-events-none absolute inset-0 z-30">
+          <ZekeChat open={chatOpen} onClose={closeChat} onReply={() => model.current?.react("Talk")} />
+        </div>
+
+        <div ref={dashLayer} className="pointer-events-none absolute inset-0">
           <div className="mx-auto grid h-full max-w-[90rem] grid-rows-[minmax(0,32svh)_minmax(0,1fr)] px-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.5fr)] lg:grid-rows-1 lg:gap-8 lg:px-8">
             <div ref={dashModelCol} className="relative">
               <div
                 ref={caption}
-                className="invisible pointer-events-auto absolute inset-x-0 bottom-2 flex justify-center lg:bottom-[8svh]"
+                className="invisible pointer-events-auto absolute inset-x-0 bottom-2 flex items-center justify-center gap-2 lg:bottom-[8svh]"
               >
                 <Subtitle
                   text={line.text}
                   cue={line.cue}
                   className="max-w-[40ch] rounded-xl bg-[#020604]/75 px-4 py-2.5"
                 />
+                <button
+                  type="button"
+                  onClick={openChat}
+                  aria-label="Ask Zeke something"
+                  title="Ask Zeke something"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#020604]/75 text-white transition-colors hover:bg-action"
+                >
+                  <svg aria-hidden viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 5h16v11H9l-5 4z" />
+                  </svg>
+                </button>
               </div>
             </div>
             <div className="relative flex min-h-0 items-center pb-4 lg:py-10 lg:pb-10">
@@ -689,7 +869,7 @@ export default function Hero() {
                 ref={slide}
                 className="invisible pointer-events-none absolute inset-0 z-10 flex items-center pb-4 lg:py-10"
               >
-                <div className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-3xl bg-card p-7 shadow-[0_40px_90px_-30px_rgba(0,0,0,0.6)] sm:p-10 lg:h-[min(820px,calc(100svh-5rem))] lg:p-14">
+                <div className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-3xl bg-card p-7 shadow-[0_40px_90px_-30px_rgba(0,0,0,0.6)] ring-1 ring-line sm:p-10 lg:h-[min(820px,calc(100svh-5rem))] lg:p-14">
                   <div className="slide-item flex items-center justify-between text-sm text-muted">
                     <span className="font-display text-lg font-extrabold tracking-[-0.03em] text-ink">
                       zeke<span className="text-brand-600">.</span>
@@ -719,7 +899,7 @@ export default function Hero() {
                   </div>
                   <div className="slide-item flex flex-col gap-1 border-t border-line pt-5 text-sm text-muted sm:flex-row sm:items-end sm:justify-between sm:gap-6">
                     <span>Lorem ipsum dolor sit amet</span>
-                    <span className="text-ink">Questions? Let&apos;s talk.</span>
+                    <a href="#contact" className="pointer-events-auto text-ink underline decoration-brand-300 underline-offset-4 transition-colors hover:text-brand-700">Questions? Let&apos;s talk.</a>
                   </div>
                 </div>
               </div>
@@ -728,7 +908,7 @@ export default function Hero() {
         </div>
 
         <div ref={ctaPanel} className="invisible pointer-events-none absolute inset-0">
-          <div className="mx-auto flex h-full max-w-6xl flex-col justify-center px-4 pb-6 pt-[32svh] lg:flex-row lg:items-center lg:justify-center lg:gap-12 lg:px-8 lg:pb-0 lg:pt-0">
+          <div ref={ctaInner} className="mx-auto flex h-full max-w-6xl flex-col justify-center px-4 pb-6 pt-[32svh] lg:flex-row lg:items-center lg:justify-center lg:gap-12 lg:px-8 lg:pb-0 lg:pt-0">
             <div ref={ctaSlot} className="hidden h-full w-[min(26vw,340px)] shrink-0 lg:block" />
             <div className="pointer-events-auto max-w-[36rem]">
               <h2 className="cta-item max-w-[14ch] text-balance font-display text-[clamp(2.6rem,6vw,5.5rem)] font-bold leading-[0.96] tracking-[-0.03em] text-white">
@@ -743,7 +923,7 @@ export default function Hero() {
                   Lorem ipsum
                 </Button>
                 <Button
-                  href="#"
+                  href="#work"
                   variant="outline"
                   className="border-white/20 text-white hover:border-white hover:text-white"
                 >
@@ -761,6 +941,8 @@ export default function Hero() {
           className="pointer-events-none invisible absolute inset-0 bg-[#020604]"
         />
       </section>
+      {/* Holds the story's scroll length while it loads, so the scrollbar doesn't resize later */}
+      <div ref={reserve} aria-hidden style={{ height: `${PIN_END * SCROLL_PER_UNIT * 100}svh` }} />
     </div>
   );
 }
