@@ -1,17 +1,34 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { SYSTEM_PROMPT } from "./zekePrompt";
 
 type Message = { from: "you" | "zeke"; text: string };
 
-const GREETING = "Hey, I'm Zeke! Ask me about my projects, hackathons, or what I'm learning.";
+const GREETING = "Hey, I'm Zeke! Tanong ka lang about my projects, hackathons, or what I'm learning.";
 
-const REPLIES = [
-  "Good question! My brain isn't plugged in yet — for now, email me at onlyzekedotcom@gmail.com.",
-  "I can't answer that one just yet. Try the Work section, or reach me on LinkedIn.",
-  "Real answers are coming soon. Meanwhile, VerdePM is my favorite thing I've built.",
-  "Still learning to talk! The quickest way to reach the real me: onlyzekedotcom@gmail.com.",
-];
+const FALLBACK = "Sorry, hindi ako makasagot ngayon. Email mo na lang ako at onlyzekedotcom@gmail.com, ako mismo ang sasagot.";
+
+// Puter's default free model; swap for any id from puter.ai.listModels().
+const MODEL = "gpt-5.4-nano";
+// Only the latest turns go back to the model, to keep requests small.
+const HISTORY = 10;
+
+/** Asks the model as Zeke. Puter is loaded on first send so it stays out of the page's initial bundle. */
+async function ask(history: Message[]): Promise<string> {
+  const { puter } = await import("@heyputer/puter.js");
+  const res = await puter.ai.chat(
+    [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...history.slice(-HISTORY).map((m) => ({ role: m.from === "you" ? "user" : "assistant", content: m.text })),
+    ],
+    { model: MODEL, max_tokens: 300 },
+  );
+  const content = res.message?.content;
+  // Models slip em dashes in despite the prompt, so strip them here too.
+  const text = typeof content === "string" ? content.replace(/\s*—\s*/g, ", ") : "";
+  return text.trim() || FALLBACK;
+}
 
 type Props = {
   open: boolean;
@@ -28,7 +45,6 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
   const list = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const greeted = useRef(false);
-  const replyIndex = useRef(0);
   const timers = useRef<number[]>([]);
 
   const later = (fn: () => void, ms: number) => {
@@ -81,11 +97,16 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
     e.preventDefault();
     const text = draft.trim();
     if (!text || typing) return;
-    setMessages((m) => [...m, { from: "you", text }]);
+    const next: Message[] = [...messages, { from: "you", text }];
+    setMessages(next);
     setDraft("");
     setTyping(true);
-    const reply = REPLIES[replyIndex.current++ % REPLIES.length];
-    later(() => zekeSays(reply), 900 + Math.random() * 600);
+    ask(next)
+      .catch((err) => {
+        console.error("Zeke chat failed", err);
+        return FALLBACK;
+      })
+      .then(zekeSays);
   };
 
   return (
