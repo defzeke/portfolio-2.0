@@ -201,12 +201,15 @@ export default function ZekeModel({
   // Normalised cursor offset from the model (-1..1).
   const pointer = useRef({ x: 0, y: 0 });
   const look = useRef({ yaw: 0, pitch: 0, weight: 0 });
+  const hasBase = useRef(false);
   const tmp = useMemo(
     () => ({
       euler: new THREE.Euler(),
       quat: new THREE.Quaternion(),
       parent: new THREE.Quaternion(),
       parentInv: new THREE.Quaternion(),
+      baseNeck: new THREE.Quaternion(),
+      baseHead: new THREE.Quaternion(),
       mouth: new THREE.Vector3(),
       camPos: new THREE.Vector3(),
       camTarget: new THREE.Vector3(),
@@ -410,7 +413,16 @@ export default function ZekeModel({
 
     // 1. Animation clips write the bone poses + face morphs.
     director.current?.blend(delta);
+    // three.js only rewrites a bone when its animated value changes. Put back the clip pose
+    // from last frame first, so the cursor-follow turn below never stacks onto itself.
+    if (hasBase.current) {
+      bones.neck?.quaternion.copy(tmp.baseNeck);
+      bones.head?.quaternion.copy(tmp.baseHead);
+    }
     mixer.update(delta);
+    if (bones.neck) tmp.baseNeck.copy(bones.neck.quaternion);
+    if (bones.head) tmp.baseHead.copy(bones.head.quaternion);
+    hasBase.current = true;
     director.current?.tick(!diving && !chatting);
 
     // 2. Mouth interior follows the jaw; the dive opens the mouth as the camera closes in.

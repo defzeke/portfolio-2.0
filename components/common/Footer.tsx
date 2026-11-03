@@ -6,48 +6,48 @@ const navigate = [
 
 const elsewhere = [
   { label: "GitHub", href: "https://github.com/defzeke" },
-  { label: "LinkedIn", href: "#" },
-  { label: "Dribbble", href: "#" },
+  { label: "LinkedIn", href: "https://www.linkedin.com/in/ezekiel-bustamante-166493353/" },
 ];
 
-const EMAIL = "hello@example.com";
+const EMAIL = "onlyzekedotcom@gmail.com";
+const GMAIL = `https://mail.google.com/mail/?view=cm&fs=1&to=${EMAIL}`;
 
 export default function Footer() {
   return (
     <footer className="relative overflow-hidden bg-[#03100a] text-white">
       <div className="relative mx-auto max-w-7xl px-6 pt-20 lg:px-8 lg:pt-28">
-        <div className="grid gap-14 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
-          <div>
-            <a
-              href={`mailto:${EMAIL}`}
-              className="group inline-flex min-h-11 items-center gap-3 py-1 font-display text-[clamp(1.9rem,4vw,3.25rem)] font-bold leading-none tracking-[-0.025em] transition-colors hover:text-brand-300"
-            >
-              {EMAIL}
-              <svg
-                aria-hidden
-                viewBox="0 0 24 24"
-                className="size-[0.7em] shrink-0 transition-transform duration-300 group-hover:-translate-y-1 group-hover:translate-x-1"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M7 17 17 7M8 7h9v9" />
-              </svg>
-            </a>
-            <p className="mt-5 max-w-[40ch] text-base leading-7 text-white/65">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
-              incididunt ut labore.
-            </p>
-          </div>
+        <a
+          href={GMAIL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group inline-flex min-h-11 max-w-full items-center gap-3 py-1 font-display text-[clamp(1.6rem,6.2vw,4.5rem)] font-bold leading-none tracking-[-0.025em] [overflow-wrap:anywhere] transition-colors hover:text-brand-300"
+        >
+          {EMAIL}
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            className="size-[0.7em] shrink-0 transition-transform duration-300 group-hover:-translate-y-1 group-hover:translate-x-1"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M7 17 17 7M8 7h9v9" />
+          </svg>
+        </a>
 
+        <div className="mt-12 grid gap-12 sm:grid-cols-2 lg:mt-16 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <p className="max-w-[40ch] text-base leading-7 text-white/65 sm:col-span-2 lg:col-span-1">
+            Cybersecurity and software developer from Metro Manila. Open to projects,
+            hackathon teams, and internships.
+          </p>
           <FooterList title="Navigate" items={navigate} />
           <FooterList title="Elsewhere" items={elsewhere} external />
         </div>
 
         <div className="mt-20 flex flex-col-reverse items-start justify-between gap-6 border-t border-white/10 py-7 text-sm text-white/55 sm:flex-row sm:items-center">
-          <p>© 2026 Ezekiel. Lorem ipsum dolor sit amet.</p>
+          <p>© 2026 Ezekiel Bustamante</p>
           <a
             href="#top"
             className="group inline-flex min-h-11 items-center gap-2 text-white/75 transition-colors hover:text-brand-300"

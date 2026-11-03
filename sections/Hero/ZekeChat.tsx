@@ -4,13 +4,13 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 type Message = { from: "you" | "zeke"; text: string };
 
-const GREETING = "Hey, I'm Zeke! Ask me anything — lorem ipsum dolor sit amet.";
-// Placeholder replies until the chat is connected to a real backend.
+const GREETING = "Hey, I'm Zeke! Ask me about my projects, hackathons, or what I'm learning.";
+
 const REPLIES = [
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. I'll have a real answer soon!",
-  "Good question — sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-  "Ut enim ad minim veniam, quis nostrud exercitation. My brain isn't plugged in yet.",
-  "Duis aute irure dolor in reprehenderit. Try me again once I'm connected!",
+  "Good question! My brain isn't plugged in yet — for now, email me at onlyzekedotcom@gmail.com.",
+  "I can't answer that one just yet. Try the Work section, or reach me on LinkedIn.",
+  "Real answers are coming soon. Meanwhile, VerdePM is my favorite thing I've built.",
+  "Still learning to talk! The quickest way to reach the real me: onlyzekedotcom@gmail.com.",
 ];
 
 type Props = {
@@ -90,14 +90,6 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
 
   return (
     <div ref={root} role="dialog" aria-modal="true" aria-label="Chat with Zeke" className="relative flex h-full flex-col">
-      <p className="pointer-events-auto absolute left-4 top-20 flex h-11 items-center gap-2.5 rounded-full border border-line bg-card/90 pl-2 pr-4 text-sm backdrop-blur lg:left-10 lg:top-24">
-        <span className="relative flex size-7 items-center justify-center rounded-full bg-action font-display text-sm font-bold text-white">
-          Z
-          <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card bg-brand-400" />
-        </span>
-        <span className="font-medium text-ink">Zeke</span>
-        <span className="text-muted">· preview replies</span>
-      </p>
       <button
         type="button"
         onClick={onClose}
@@ -154,7 +146,7 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Ask Zeke something…"
             aria-label="Message"
-            className="h-11 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted focus-visible:outline-none"
+            className="chat-input h-11 min-w-0 flex-1 bg-transparent text-[15px] text-ink placeholder:text-muted"
           />
           <button
             type="submit"

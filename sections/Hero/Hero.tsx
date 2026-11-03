@@ -46,22 +46,31 @@ function lockScroll(on: boolean) {
   window[method]("scroll", holdPosition);
 }
 
-// Short personal facts for the about panel (placeholder copy).
+const EMAIL = "onlyzekedotcom@gmail.com";
+const GMAIL = `https://mail.google.com/mail/?view=cm&fs=1&to=${EMAIL}`;
+const LINKEDIN = "https://www.linkedin.com/in/ezekiel-bustamante-166493353/";
+
 const aboutFacts = [
-  { label: "Based in", value: "Lorem, Ipsum" },
-  { label: "Focus", value: "Dolor sit amet" },
-  { label: "Currently", value: "Consectetur elit" },
+  { label: "Based in", value: "Metro Manila, PH" },
+  { label: "Studying", value: "BSCpE, PUP Manila" },
+  { label: "Focus", value: "Cybersecurity & Full‑stack" },
 ];
 
 const AT = { intro: 0, about: 1, center: 2, dark: 3.4, dash: 4.4, thanks: 5.6, cta: 6.8 };
 const PIN_END = AT.cta + 0.4;
-const THANKS_LINE = "Thank you for listening! Lorem ipsum dolor sit amet.";
-const CTA_LINE = "Lorem ipsum — that's me. Let's build something together.";
+const THANKS_LINE = "Thanks for sticking around! That's the tour.";
+const CTA_LINE = "That's me. Got a project, a hackathon team, or a role? Let's talk.";
 const NAV_HIDE_AT = 2.05;
 const AUTO_ADVANCE_DELAY = 2;
 const AUTO_ADVANCE_DURATION = 2.6;
 const SCRUB_SMOOTHING = 1.2;
-const SETTLE_THRESHOLD = 0.04;
+// How far into the next scene (fraction of the gap) you must scroll for it to carry you there.
+// Less than that and you settle back on the scene you were leaving.
+const SETTLE_THRESHOLD = 0.15;
+// Wait this long after your last wheel/touch input before settling (ms).
+const SETTLE_DELAY = 300;
+// Going past a scene you never stopped on needs a bigger push before it skips that scene.
+const SKIP_THRESHOLD = 0.5;
 const SCROLL_PER_UNIT = 1.2;
 // The intro never waits longer than this for the 3D model; he drops in when he arrives.
 const MODEL_WAIT = 2.5;
@@ -232,7 +241,20 @@ export default function Hero() {
         let scene: Scene = "intro";
         let travel: gsap.core.Tween | null = null;
         let travelTo: string | null = null;
-        let restP = 0;
+        // Direction of your most recent scroll input (1 = down/forward, -1 = up/back).
+        let lastDir: 1 | -1 = 1;
+        let lastInput = 0;
+        let settleCall: gsap.core.Tween | null = null;
+        // Progress of the scene this scroll gesture started from.
+        let origin = 0;
+        const stopsNow = () =>
+          Object.entries(tl.labels)
+            .map(([name, time]) => [name, time / tl.duration()] as [string | null, number])
+            .filter(([name]) => name !== "dark")
+            .concat([[null, 1]])
+            .sort((a, b) => a[1] - b[1]);
+        const nearestStop = (p: number) =>
+          stopsNow().reduce((a, b) => (Math.abs(b[1] - p) < Math.abs(a[1] - p) ? b : a))[1];
 
         // Navbar visibility has exactly one owner (this), driven by where the story is.
         let navShown = true;
@@ -284,7 +306,7 @@ export default function Hero() {
             duration,
             ease: "sine.inOut",
             onComplete: () => {
-              restP = label === null ? 1 : tl.labels[label] / tl.duration();
+              origin = label === null ? 1 : tl.labels[label] / tl.duration();
               done();
               opts.focus?.()?.focus({ preventScroll: true });
             },
@@ -292,31 +314,32 @@ export default function Hero() {
           });
         }
 
+        // When you stop between two scenes, finish the move in the direction you were going,
+        // judged from where you are right now: past SETTLE_THRESHOLD of the gap → next scene,
+        // otherwise back to the one you were leaving. Never more than one scene away.
         const settle = () => {
+          settleCall = null;
           const st = tl.scrollTrigger;
           if (!st || travel || window.scrollY < st.start || window.scrollY >= st.end) return;
-          const stops = Object.entries(tl.labels)
-            .map(([name, time]) => [name, time / tl.duration()] as [string | null, number])
-            .filter(([name]) => name !== "dark")
-            .concat([[null, 1]])
-            .sort((a, b) => a[1] - b[1]);
+          const wait = SETTLE_DELAY - (performance.now() - lastInput);
+          if (wait > 0) {
+            settleCall = gsap.delayedCall(wait / 1000, settle);
+            return;
+          }
+          const stops = stopsNow();
           const p = st.progress;
           const resting = stops.find(([, v]) => Math.abs(v - p) < 0.002);
           if (resting) {
-            restP = resting[1];
+            origin = resting[1];
             return;
           }
-          const eps = SETTLE_THRESHOLD / (stops.length - 1);
-          const moved = p - restP;
-          let target: [string | null, number];
-          if (Math.abs(moved) < eps) {
-            // just a nudge: ease back onto the scene you were on
-            target = stops.reduce((a, b) => (Math.abs(b[1] - p) < Math.abs(a[1] - p) ? b : a));
-          } else if (moved > 0) {
-            target = stops.find(([, v]) => v > p) ?? stops[stops.length - 1];
-          } else {
-            target = [...stops].reverse().find(([, v]) => v < p) ?? stops[0];
-          }
+          const prev = [...stops].reverse().find(([, v]) => v < p) ?? stops[0];
+          const next = stops.find(([, v]) => v > p) ?? stops[stops.length - 1];
+          const f = (p - prev[1]) / (next[1] - prev[1] || 1);
+          // leaving the scene you started from: a small push is enough; skipping one: a big one
+          const fwd = Math.abs(prev[1] - origin) < 0.002 ? SETTLE_THRESHOLD : SKIP_THRESHOLD;
+          const back = Math.abs(next[1] - origin) < 0.002 ? SETTLE_THRESHOLD : SKIP_THRESHOLD;
+          const target = lastDir > 0 ? (f > fwd ? next : prev) : f < 1 - back ? prev : next;
           goTo(target[0]);
         };
 
@@ -501,14 +524,50 @@ export default function Hero() {
         };
         document.addEventListener("click", onAnchorClick);
 
-        // Scrolling yourself takes over from a scripted glide or a pending auto-advance.
+        // Scrolling yourself takes over from a scripted glide or a pending auto-advance,
+        // and records which way you're going.
         const takeOver = () => {
+          // a fresh gesture (not a continuation, not mid-glide) starts from the nearest scene
+          if (!travel && performance.now() - lastInput > 600 && tl.scrollTrigger) {
+            origin = nearestStop(tl.scrollTrigger.progress);
+          }
           cancelAuto();
           travel?.kill();
+          settleCall?.kill();
+          settleCall = null;
+          lastInput = performance.now();
         };
-        const inputs = ["wheel", "touchstart", "keydown"] as const;
-        inputs.forEach((t) => window.addEventListener(t, takeOver, { passive: true }));
-        // Settled on the laugh without scrolling on: start the auto-advance countdown.
+        let touchY = 0;
+        const onWheel = (e: WheelEvent) => {
+          takeOver();
+          if (e.deltaY) lastDir = e.deltaY > 0 ? 1 : -1;
+        };
+        const onTouchStart = (e: TouchEvent) => {
+          takeOver();
+          touchY = e.touches[0]?.clientY ?? 0;
+        };
+        const onTouchMove = (e: TouchEvent) => {
+          lastInput = performance.now();
+          const y = e.touches[0]?.clientY ?? touchY;
+          if (Math.abs(y - touchY) > 2) lastDir = y < touchY ? 1 : -1;
+          touchY = y;
+        };
+        const onKey = (e: KeyboardEvent) => {
+          takeOver();
+          if (["ArrowDown", "PageDown", "End"].includes(e.key) || (e.key === " " && !e.shiftKey)) lastDir = 1;
+          if (["ArrowUp", "PageUp", "Home"].includes(e.key) || (e.key === " " && e.shiftKey)) lastDir = -1;
+        };
+        // A scrollbar drag has no wheel/touch: take its direction from the scroll itself.
+        const onScrollDir = () => {
+          if (travel || performance.now() - lastInput < SETTLE_DELAY) return;
+          const d = tl.scrollTrigger?.direction;
+          if (d) lastDir = d > 0 ? 1 : -1;
+        };
+        window.addEventListener("wheel", onWheel, { passive: true });
+        window.addEventListener("touchstart", onTouchStart, { passive: true });
+        window.addEventListener("touchmove", onTouchMove, { passive: true });
+        window.addEventListener("keydown", onKey);
+        window.addEventListener("scroll", onScrollDir, { passive: true });
         const onScrollEnd = () => {
           settle();
           if (scene === "center") armAuto();
@@ -516,7 +575,12 @@ export default function Hero() {
         ScrollTrigger.addEventListener("scrollEnd", onScrollEnd);
 
         removeLinkRelease = () => {
-          inputs.forEach((t) => window.removeEventListener(t, takeOver));
+          window.removeEventListener("wheel", onWheel);
+          window.removeEventListener("touchstart", onTouchStart);
+          window.removeEventListener("touchmove", onTouchMove);
+          window.removeEventListener("keydown", onKey);
+          window.removeEventListener("scroll", onScrollDir);
+          settleCall?.kill();
           ScrollTrigger.removeEventListener("scrollEnd", onScrollEnd);
           cancelAuto();
           travel?.kill();
@@ -742,7 +806,7 @@ export default function Hero() {
                 </span>
                 <span className="block overflow-hidden pb-[0.22em]">
                   <span className="intro-line relative inline-block text-brand-600">
-                    Ezekiel.
+                    Ezekiel Bustamante.
                     <svg
                       aria-hidden
                       viewBox="0 0 300 24"
@@ -765,13 +829,13 @@ export default function Hero() {
                 </span>
               </h1>
               <p className="intro-copy mt-5 max-w-[42ch] text-base leading-7 text-muted sm:text-lg sm:leading-8">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
-                incididunt ut labore et dolore magna aliqua.
+                I&apos;m Zeke — a Computer Engineering student at PUP Manila building secure,
+                full-stack web apps, with a soft spot for cybersecurity and programming.
               </p>
               <div className="intro-actions mt-8 flex flex-wrap gap-3">
-                <Button href="#work">Lorem ipsum</Button>
+                <Button href="#work">See my work</Button>
                 <Button href="#contact" variant="outline">
-                  Dolor sit amet
+                  Get in touch
                 </Button>
               </div>
             </div>
@@ -781,17 +845,21 @@ export default function Hero() {
               className="invisible absolute inset-0 flex flex-col justify-start lg:justify-center"
             >
               <h2 tabIndex={-1} className="about-item text-balance font-display outline-none text-[clamp(2.25rem,4.4vw,3.75rem)] font-bold leading-[1.02] tracking-[-0.02em]">
-                Lorem ipsum dolor sit amet, <span className="text-brand-600">consectetur</span>.
+                Secure by habit, <span className="text-brand-600">curious</span> by default.
               </h2>
               <p className="about-item mt-6 max-w-[46ch] text-base leading-7 text-muted sm:text-lg sm:leading-8">
-                Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
-                veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo.
+                I wrote my first Hello World in 2024, before college even started. Since then
+                I&apos;ve led technology teams across various organizations and shipped full-stack
+                projects that placed at two hackathons. Now I&apos;m pointing that builder&apos;s
+                mindset at security through pentesting courses and certifications, so what I ship
+                holds up when someone tries to break it.
               </p>
-              <dl className="about-item mt-8 grid max-w-lg grid-cols-3 gap-5 border-t border-line pt-5">
+              {/* Flex, not a 3-col grid: each fact keeps its natural width on one line and wraps whole. */}
+              <dl className="about-item mt-8 flex flex-wrap gap-x-10 gap-y-4 border-t border-line pt-5">
                 {aboutFacts.map((f) => (
                   <div key={f.label}>
                     <dt className="text-sm text-muted">{f.label}</dt>
-                    <dd className="mt-1 font-medium text-ink">{f.value}</dd>
+                    <dd className="mt-1 whitespace-nowrap font-medium text-ink">{f.value}</dd>
                   </div>
                 ))}
               </dl>
@@ -874,7 +942,7 @@ export default function Hero() {
                     <span className="font-display text-lg font-extrabold tracking-[-0.03em] text-ink">
                       zeke<span className="text-brand-600">.</span>
                     </span>
-                    <span>Portfolio 2026</span>
+                    <span>Ezekiel Bustamante</span>
                   </div>
                   <div>
                     <h2 className="slide-item font-display text-[clamp(2.4rem,6.5vw,6.25rem)] font-bold leading-[0.92] tracking-[-0.03em] text-ink">
@@ -898,7 +966,7 @@ export default function Hero() {
                     </svg>
                   </div>
                   <div className="slide-item flex flex-col gap-1 border-t border-line pt-5 text-sm text-muted sm:flex-row sm:items-end sm:justify-between sm:gap-6">
-                    <span>Lorem ipsum dolor sit amet</span>
+                    <span>Cybersecurity · Software Developer</span>
                     <a href="#contact" className="pointer-events-auto text-ink underline decoration-brand-300 underline-offset-4 transition-colors hover:text-brand-700">Questions? Let&apos;s talk.</a>
                   </div>
                 </div>
@@ -912,22 +980,24 @@ export default function Hero() {
             <div ref={ctaSlot} className="hidden h-full w-[min(26vw,340px)] shrink-0 lg:block" />
             <div className="pointer-events-auto max-w-[36rem]">
               <h2 className="cta-item max-w-[14ch] text-balance font-display text-[clamp(2.6rem,6vw,5.5rem)] font-bold leading-[0.96] tracking-[-0.03em] text-white">
-                Lorem ipsum dolor sit <span className="text-brand-300">amet?</span>
+                Let&apos;s build something <span className="text-brand-300">secure.</span>
               </h2>
               <p className="cta-item mt-6 max-w-[44ch] text-base leading-7 text-white/70 sm:text-lg sm:leading-8">
-                Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
-                magna aliqua.
+                Have a project, a hackathon team that needs a builder, or an internship in mind?
+                My inbox is open.
               </p>
               <div className="cta-item mt-9 flex flex-wrap gap-3">
-                <Button href="mailto:hello@example.com" variant="light">
-                  Lorem ipsum
+                <Button href={GMAIL} target="_blank" rel="noopener noreferrer" variant="light">
+                  Email me
                 </Button>
                 <Button
-                  href="#work"
+                  href={LINKEDIN}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   variant="outline"
                   className="border-white/20 text-white hover:border-white hover:text-white"
                 >
-                  Dolor sit amet
+                  LinkedIn
                 </Button>
               </div>
             </div>

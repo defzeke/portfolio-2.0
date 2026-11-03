@@ -176,6 +176,13 @@ body {
   }
 }
 
+/* The chat input sits in a pill that shows focus itself (focus-within border). */
+.chat-input,
+.chat-input:focus,
+.chat-input:focus-visible {
+  outline: none !important;
+}
+
 /* Chat transcript fades out at the top over Zeke's face. */
 .chat-fade {
   mask-image: linear-gradient(to bottom, transparent, #000 2.5rem);

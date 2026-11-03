@@ -16,23 +16,67 @@ export function fixClips(scene: THREE.Object3D, animations: THREE.AnimationClip[
 
 const bone = (scene: THREE.Object3D, name: string) => scene.getObjectByName(name) ?? null;
 
+
+/** Pose bones are restored after a fix runs, so the real mixer binds to the rest pose. */
+function snapshot(scene: THREE.Object3D) {
+  const saved: [THREE.Object3D, THREE.Vector3, THREE.Quaternion, THREE.Vector3][] = [];
+  scene.traverse((o) => saved.push([o, o.position.clone(), o.quaternion.clone(), o.scale.clone()]));
+  return () => saved.forEach(([o, p, q, sc]) => (o.position.copy(p), o.quaternion.copy(q), o.scale.copy(sc)));
+}
+
+/**
+ * Thinking: re-aim the chin hand on every keyframe. Its long axis keeps pointing where the
+ * clip points it (up to the chin), and the palm turns toward his face, so the back of the
+ * hand faces the viewer and the fingers curl in under the chin.
+ */
 function fixThinkingHand(scene: THREE.Object3D, clip: THREE.AnimationClip) {
   const hand = bone(scene, "RightHand");
   const middle = bone(scene, "RightHandMiddle1");
+  const index = bone(scene, "RightHandIndex1");
+  const pinky = bone(scene, "RightHandPinky1");
   const track = clip.tracks.find((t) => t.name === "RightHand.quaternion");
-  if (!hand || !middle || !track) return;
-  // The hand's long axis in its own space points at the middle-finger root.
-  const axis = middle.position.clone().normalize();
-  const twist = new THREE.Quaternion().setFromAxisAngle(axis, Math.PI / 2);
+  if (!hand?.parent || !middle || !index || !pinky || !track) return;
+
+  const long = middle.position.clone().normalize();
+  const across = index.position.clone().sub(pinky.position).normalize();
+  const palm = new THREE.Vector3().crossVectors(long, across);
+  palm.sub(long.clone().multiplyScalar(palm.dot(long))).normalize();
+  const src = new THREE.Matrix4().makeBasis(long, palm, new THREE.Vector3().crossVectors(long, palm)).transpose();
+
+  const restore = snapshot(scene);
+  const mixer = new THREE.AnimationMixer(scene);
+  const action = mixer.clipAction(clip);
+  action.play();
+
+  const want = new THREE.Vector3(0, 0.35, -1).normalize(); // toward his face
+  const foreW = new THREE.Quaternion();
+  const handW = new THREE.Quaternion();
+  const wLong = new THREE.Vector3();
+  const wPalm = new THREE.Vector3();
+  const dst = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const v = track.values;
-  for (let i = 0; i < v.length; i += 4) {
-    q.fromArray(v, i).multiply(twist).toArray(v, i);
-  }
+  track.times.forEach((t, k) => {
+    action.time = t;
+    mixer.update(0);
+    scene.updateMatrixWorld(true);
+    hand.parent!.getWorldQuaternion(foreW);
+    hand.getWorldQuaternion(handW);
+    wLong.copy(long).applyQuaternion(handW);
+    wPalm.copy(want).sub(wLong.clone().multiplyScalar(want.dot(wLong))).normalize();
+    dst.makeBasis(wLong, wPalm, new THREE.Vector3().crossVectors(wLong, wPalm));
+    q.setFromRotationMatrix(dst.multiply(src));
+    foreW.invert().multiply(q).toArray(v, k * 4);
+  });
+
+  mixer.stopAllAction();
+  mixer.uncacheRoot(scene);
+  restore();
 }
 
 function addShrugArms(scene: THREE.Object3D, shrug: THREE.AnimationClip, idle: THREE.AnimationClip) {
   // Pose the skeleton in Idle so world-space directions are measured from the real start pose.
+  const restore = snapshot(scene);
   const mixer = new THREE.AnimationMixer(scene);
   mixer.clipAction(idle).play();
   mixer.update(0);
@@ -106,6 +150,7 @@ function addShrugArms(scene: THREE.Object3D, shrug: THREE.AnimationClip, idle: T
 
   mixer.stopAllAction();
   mixer.uncacheRoot(scene);
+  restore();
 
   const replaced = new Set(tracks.map((t) => t.name));
   shrug.tracks = [...shrug.tracks.filter((t) => !replaced.has(t.name)), ...tracks];

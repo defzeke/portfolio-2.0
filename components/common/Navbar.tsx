@@ -30,7 +30,7 @@ export default function Navbar() {
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <Button href="#contact" className="h-10 px-4 sm:px-5">
-            Lorem ipsum
+            Let&apos;s talk
           </Button>
         </div>
       </nav>
