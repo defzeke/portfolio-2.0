@@ -180,6 +180,9 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
             </svg>
           </button>
         </form>
+        <p className="mx-auto mt-2 w-fit rounded-full border border-line bg-card/90 px-3 py-1 text-center text-xs text-ink backdrop-blur">
+          Chat runs on Puter. Your first message may open a free Puter sign-in.
+        </p>
       </div>
     </div>
   );
