@@ -19,10 +19,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const description =
+  "Zeke's portfolio: a Computer Engineering student at PUP Manila building secure, full-stack web apps.";
+
 export const metadata: Metadata = {
-  title: "Ezekiel Bustamante — Cybersecurity & Software Developer",
-  description:
-    "Zeke's portfolio: a Computer Engineering student at PUP Manila building secure, full-stack web apps.",
+  // Makes the share-preview image URL absolute so chat apps can fetch it.
+  metadataBase: new URL("https://heyzeke.me"),
+  title: "Zeke",
+  description,
+  openGraph: { title: "Zeke", siteName: "Zeke", description, type: "website" },
 };
 
 // Runs before first paint: saved choice, else the system preference.
