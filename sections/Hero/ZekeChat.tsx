@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { SYSTEM_PROMPT } from "./zekePrompt";
 
 type Message = { from: "you" | "zeke"; text: string };
 
@@ -9,25 +8,19 @@ const GREETING = "Hey, I'm Zeke! Tanong ka lang about my projects, hackathons, o
 
 const FALLBACK = "Sorry, hindi ako makasagot ngayon. Email mo na lang ako at onlyzekedotcom@gmail.com, ako mismo ang sasagot.";
 
-// Puter's default free model; swap for any id from puter.ai.listModels().
-const MODEL = "gpt-5.4-nano";
 // Only the latest turns go back to the model, to keep requests small.
 const HISTORY = 10;
 
-/** Asks the model as Zeke. Puter is loaded on first send so it stays out of the page's initial bundle. */
+/** Asks the model as Zeke through our own route, which holds the API key. */
 async function ask(history: Message[]): Promise<string> {
-  const { puter } = await import("@heyputer/puter.js");
-  const res = await puter.ai.chat(
-    [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...history.slice(-HISTORY).map((m) => ({ role: m.from === "you" ? "user" : "assistant", content: m.text })),
-    ],
-    { model: MODEL, max_tokens: 300 },
-  );
-  const content = res.message?.content;
-  // Models slip em dashes in despite the prompt, so strip them here too.
-  const text = typeof content === "string" ? content.replace(/\s*—\s*/g, ", ") : "";
-  return text.trim() || FALLBACK;
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: history.slice(-HISTORY) }),
+  });
+  if (!res.ok) throw new Error(`Chat request failed: ${res.status}`);
+  const { reply } = await res.json();
+  return reply;
 }
 
 type Props = {
@@ -165,6 +158,7 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
             ref={input}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            maxLength={1000}
             placeholder="Ask Zeke something…"
             aria-label="Message"
             className="chat-input h-11 min-w-0 flex-1 bg-transparent text-[15px] text-ink placeholder:text-muted"
@@ -180,9 +174,6 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
             </svg>
           </button>
         </form>
-        <p className="mx-auto mt-2 w-fit rounded-full border border-line bg-card/90 px-3 py-1 text-center text-xs text-ink backdrop-blur">
-          Chat runs on Puter. Your first message may open a free Puter sign-in.
-        </p>
       </div>
     </div>
   );

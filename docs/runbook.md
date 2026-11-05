@@ -146,8 +146,9 @@ smaller surface cards. An empty array renders the "available on request" empty s
 
 ## 7. Deploy
 
-Standard Next deployment (Vercel recommended; the app is fully static in practice). No environment
-variables, no API routes, no database, no server actions.
+Standard Next deployment (Vercel recommended; the page is static in practice). One API route,
+`/api/chat`, which needs the `GEMINI_API_KEY` environment variable (`.env.local` for local dev, project
+settings in production). No database, no server actions.
 
 Because the whole experience lives in one client component with a pinned timeline, do not enable
 anything that strips scripts or rewrites anchors at the edge (e.g. HTML minifiers that drop
