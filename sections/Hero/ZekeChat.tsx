@@ -37,6 +37,7 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const greeted = useRef(false);
   const timers = useRef<number[]>([]);
 
@@ -82,6 +83,26 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
     return () => t.forEach(clearTimeout);
   }, []);
 
+  // A phone keyboard shrinks the visual viewport but leaves the layout alone, so the input
+  // would sit behind it. Lift the panel by however much of the chat is covered.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const el = panel.current;
+    if (!open || !vv || !el) return;
+    const lift = () => {
+      const bottom = root.current?.getBoundingClientRect().bottom ?? 0;
+      const covered = Math.max(0, bottom - (vv.offsetTop + vv.height));
+      el.style.transform = covered ? `translateY(-${covered}px)` : "";
+    };
+    vv.addEventListener("resize", lift);
+    vv.addEventListener("scroll", lift);
+    return () => {
+      vv.removeEventListener("resize", lift);
+      vv.removeEventListener("scroll", lift);
+      el.style.transform = "";
+    };
+  }, [open]);
+
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
@@ -115,7 +136,7 @@ export default function ZekeChat({ open, onClose, onReply }: Props) {
         </svg>
       </button>
 
-      <div className="pointer-events-auto mx-auto mt-auto w-full max-w-2xl px-4 pb-5 lg:pb-8">
+      <div ref={panel} className="pointer-events-auto mx-auto mt-auto w-full max-w-2xl px-4 pb-5 lg:pb-8">
         <div
           ref={list}
           aria-live="polite"

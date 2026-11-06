@@ -441,28 +441,37 @@ function Experience({ onInsight }: { onInsight?: Insight }) {
 
 function Certifications() {
   return (
-    <ul className="divide-y divide-line border-y border-line">
-      {certifications.map((c) => (
-        <li key={c.href}>
-          <a
-            href={c.href}
-            {...external}
-            className="group flex min-h-11 items-center justify-between gap-4 py-4"
-          >
-            <span>
-              <span className="block font-semibold text-ink transition-colors group-hover:text-brand-700">
-                {c.name}
+    <div className="space-y-6">
+      <p className="flex items-baseline gap-2.5 text-sm leading-6 text-muted">
+        <span aria-hidden className="size-2 shrink-0 translate-y-[-1px] animate-pulse rounded-full bg-brand-500 motion-reduce:animate-none" />
+        <span>
+          <span className="font-medium text-ink">Cybersecurity courses and certs in progress.</span> This list is getting
+          patched soon, no restart required.
+        </span>
+      </p>
+      <ul className="divide-y divide-line border-y border-line">
+        {certifications.map((c) => (
+          <li key={c.href}>
+            <a
+              href={c.href}
+              {...external}
+              className="group flex min-h-11 items-center justify-between gap-4 py-4"
+            >
+              <span>
+                <span className="block font-semibold text-ink transition-colors group-hover:text-brand-700">
+                  {c.name}
+                </span>
+                <span className="text-sm text-muted">{c.org}</span>
               </span>
-              <span className="text-sm text-muted">{c.org}</span>
-            </span>
-            <span className="flex shrink-0 items-center gap-1.5 text-sm text-muted transition-colors group-hover:text-brand-700">
-              <span className="hidden @md:inline">View credential</span>
-              <Icon d="M7 17 17 7M8 7h9v9" />
-            </span>
-          </a>
-        </li>
-      ))}
-    </ul>
+              <span className="flex shrink-0 items-center gap-1.5 text-sm text-muted transition-colors group-hover:text-brand-700">
+                <span className="hidden @md:inline">View credential</span>
+                <Icon d="M7 17 17 7M8 7h9v9" />
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

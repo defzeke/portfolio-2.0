@@ -14,14 +14,10 @@ import ZekeChat from "./ZekeChat";
 import type { Reaction, ZekeControls, ZekeRig } from "./ZekeModel";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger, ScrollToPlugin);
-// Mobile browsers resize the viewport as the address bar shows/hides; don't re-measure the
-// whole pinned story (and jump) for that.
 ScrollTrigger.config({ ignoreMobileResize: true });
 
 const NAME = "zeke";
 
-// Scroll lock that never hides the scrollbar (hiding it narrows the page and makes the
-// model jump). Blocks scroll input and holds the position instead.
 const lockKeys = new Set([" ", "PageDown", "PageUp", "ArrowDown", "ArrowUp", "Home", "End"]);
 let lockedAt: number | null = null;
 const blockInput = (e: Event) => {
@@ -64,8 +60,6 @@ const NAV_HIDE_AT = 2.05;
 const AUTO_ADVANCE_DELAY = 2;
 const AUTO_ADVANCE_DURATION = 2.6;
 const SCRUB_SMOOTHING = 1.2;
-// How far into the next scene (fraction of the gap) you must scroll for it to carry you there.
-// Less than that and you settle back on the scene you were leaving.
 const SETTLE_THRESHOLD = 0.15;
 // Wait this long after your last wheel/touch input before settling (ms).
 const SETTLE_DELAY = 300;
@@ -118,6 +112,7 @@ export default function Hero() {
   const chatLayer = useRef<HTMLDivElement>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const stageX = useRef(0);
+  const chatIsOpen = useRef(false);
   const turnBefore = useRef(0);
   const opener = useRef<HTMLElement | null>(null);
   const dashLayer = useRef<HTMLDivElement>(null);
@@ -223,10 +218,26 @@ export default function Hero() {
         height: () => pose().height,
       });
 
+      // A refresh re-renders the story's stage position over the chat's centring. Take the fresh
+      // value as where closing the chat returns to, and put him back in the centre.
+      const keepChatCentred = () => {
+        if (!chatIsOpen.current) return;
+        const x = Number(gsap.getProperty(stage.current, "x"));
+        if (x !== 0) stageX.current = x; // still 0: nothing rewrote it, the saved spot stands
+        gsap.set(stage.current, { x: 0 });
+      };
       const onResize = () => {
-        if (flags.aside && !flags.scroll) gsap.set(stage.current, asidePose());
+        if (flags.aside && !flags.scroll) {
+          gsap.set(stage.current, asidePose());
+          keepChatCentred();
+        }
+      };
+      // Before the story exists a refresh rewrites nothing, so x could be mid-animation.
+      const onRefresh = () => {
+        if (flags.scroll) keepChatCentred();
       };
       window.addEventListener("resize", onResize);
+      ScrollTrigger.addEventListener("refresh", onRefresh);
 
       const finish = (tl: gsap.core.Timeline) => {
         if (reduced) tl.progress(1);
@@ -671,6 +682,7 @@ export default function Hero() {
 
       return () => {
         window.removeEventListener("resize", onResize);
+        ScrollTrigger.removeEventListener("refresh", onRefresh);
         if (onAnchorClick) document.removeEventListener("click", onAnchorClick);
         removeLinkRelease?.();
         lockScroll(false);
@@ -681,6 +693,7 @@ export default function Hero() {
 
   const chatMotion = (open: boolean, fromHero: boolean) => {
     const phone = !window.matchMedia("(min-width: 1024px)").matches;
+    chatIsOpen.current = open;
     if (open) {
       Object.assign(rig.current, phone ? FACE_PHONE : FACE_DESKTOP);
       turnBefore.current = rig.current.turn;
