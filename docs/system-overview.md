@@ -32,7 +32,7 @@ app/
   globals.css       Tokens (@theme), dark overrides, utility layers, keyframes
 
 components/
-  common/Navbar.tsx        Fixed bar; tone controlled by the story via [data-nav]
+  common/Navbar.tsx        Bubble menu: logo + theme + menu pills; shown/hidden by the story via [data-nav]
   common/Footer.tsx        Dark footer with the huge email link
   common/ThemeToggle.tsx   Data-attribute + localStorage toggle
   ui/Button.tsx            Anchor styled as a pill (3 variants)
@@ -66,7 +66,7 @@ Only the page shell is a server component.
 | --- | --- | --- |
 | `app/layout.tsx` | Server | Emits an inline `<script>` before paint |
 | `app/page.tsx` | Server | Renders `Navbar`, `Hero`, `Footer` |
-| `Navbar` | Server | Links + `ThemeToggle` (the only client child) |
+| `Navbar` | Client | Bubble menu (GSAP pop-in overlay) + `ThemeToggle` |
 | `Footer` | Server | Static |
 | `ThemeToggle` | Client | Reads/writes `document.documentElement.dataset.theme` |
 | `Hero` | Client | Owns the timeline and all scene state |
@@ -305,8 +305,8 @@ model jump. Instead it:
 | `onLeaveBack` | Shown, light |
 | Intro timeline | Shown at the "actions" beat |
 
-Tone is written as `data-nav` → `[data-nav][data-tone="dark"]` rules in `globals.css`. Components
-never set tone themselves.
+Tone is still written to `data-nav`, but nothing styles it now: the bubble menu's pills carry their
+own card background, so they read on both the light hero and the dark ending.
 
 ### 3.9 Auto-advance
 

@@ -100,6 +100,7 @@ export default function Hero() {
   const scrollCue = useRef<HTMLDivElement>(null);
   const dark = useRef<HTMLDivElement>(null);
   const blackout = useRef<HTMLDivElement>(null);
+  const curtain = useRef<HTMLDivElement>(null);
   const dashModelCol = useRef<HTMLDivElement>(null);
   const dash = useRef<HTMLDivElement>(null);
   const caption = useRef<HTMLDivElement>(null);
@@ -110,8 +111,7 @@ export default function Hero() {
   const textLayer = useRef<HTMLDivElement>(null);
   const chatBtn = useRef<HTMLButtonElement>(null);
   const chatLayer = useRef<HTMLDivElement>(null);
-  const [chatOpen, setChatOpen] = useState(false);
-  const stageX = useRef(0);
+  const [chatOpen, setChatOpen] = useState(false);  const stageX = useRef(0);
   const chatIsOpen = useRef(false);
   const turnBefore = useRef(0);
   const opener = useRef<HTMLElement | null>(null);
@@ -251,6 +251,7 @@ export default function Hero() {
         gsap.set(reserve.current, { display: "none" });
         let scene: Scene = "intro";
         let travel: gsap.core.Tween | null = null;
+        let curtainTl: gsap.core.Timeline | null = null;
         let travelTo: string | null = null;
         // Direction of your most recent scroll input (1 = down/forward, -1 = up/back).
         let lastDir: 1 | -1 = 1;
@@ -297,11 +298,38 @@ export default function Hero() {
         };
 
         // Glide to a scene label (or null: out of the story, into the footer).
-        function goTo(label: string | null, opts: { duration?: number; focus?: () => HTMLElement | null | undefined } = {}) {
+        function goTo(
+          label: string | null,
+          opts: { duration?: number; instant?: boolean; focus?: () => HTMLElement | null | undefined } = {},
+        ) {
           const st = tl.scrollTrigger;
           if (!st) return;
           cancelAuto();
           travel?.kill();
+          if (opts.instant) {
+            // Teleport behind a curtain in the destination's own colour: fade it in, jump the
+            // scroll (skipping the scrub's catch-up so no scene plays in between), fade it out.
+            const jump = () => {
+              window.scrollTo({ top: label === null ? st.end + 2 : st.labelToScroll(label), behavior: "instant" });
+              ScrollTrigger.update();
+              st.getTween()?.progress(1);
+              origin = label === null ? 1 : tl.labels[label] / tl.duration();
+              if (scene === "center") armAuto();
+              opts.focus?.()?.focus({ preventScroll: true });
+            };
+            const darkScene = label === null || label === "dash" || label === "cta";
+            curtainTl?.kill();
+            curtainTl = gsap
+              .timeline()
+              // a CSS variable, so set it straight on the style rather than through GSAP's colour parser
+              .add(() => {
+                if (curtain.current) curtain.current.style.backgroundColor = darkScene ? "#03100a" : "var(--color-background)";
+              })
+              .to(curtain.current, { autoAlpha: 1, duration: reduced ? 0.15 : 0.28, ease: "power2.in" })
+              .add(jump)
+              .to(curtain.current, { autoAlpha: 0, duration: reduced ? 0.2 : 0.5, ease: "power2.out" }, "+=0.08");
+            return;
+          }
           const to = label === null ? PIN_END : tl.labels[label];
           const distance = Math.abs(to - st.progress * tl.duration());
           const duration =
@@ -531,7 +559,7 @@ export default function Hero() {
           const label = link && anchors[link.getAttribute("href") ?? ""];
           if (!label || !tl.scrollTrigger) return;
           e.preventDefault();
-          goTo(label, { focus: () => focusFor(label) });
+          goTo(label, { instant: true, focus: () => focusFor(label) });
         };
         document.addEventListener("click", onAnchorClick);
 
@@ -740,6 +768,8 @@ export default function Hero() {
 
   return (
     <div ref={scope}>
+      {/* Covers nav-link teleports; under the navbar (z-50) so the bar stays put. */}
+      <div ref={curtain} aria-hidden className="pointer-events-none invisible fixed inset-0 z-[45]" />
       {/* 1. Name loader */}
       <div
         ref={loader}
@@ -861,11 +891,9 @@ export default function Hero() {
                 Secure by habit, <span className="text-brand-600">curious</span> by default.
               </h2>
               <p className="about-item mt-6 max-w-[46ch] text-base leading-7 text-muted sm:text-lg sm:leading-8">
-                I wrote my first Hello World in 2024, before college even started. Since then
-                I&apos;ve led technology teams across various organizations and shipped full-stack
-                projects that placed at two hackathons. Now I&apos;m pointing that builder&apos;s
-                mindset at security through pentesting courses and certifications, so what I ship
-                holds up when someone tries to break it.
+                First Hello World in 2024, before college. Since then I&apos;ve led tech teams and
+                shipped full-stack projects that placed at two hackathons. Now I&apos;m taking
+                pentesting courses and certs so what I build holds up when someone tries to break it.
               </p>
               {/* Flex, not a 3-col grid: each fact keeps its natural width on one line and wraps whole. */}
               <dl className="about-item mt-8 flex flex-wrap gap-x-10 gap-y-4 border-t border-line pt-5">

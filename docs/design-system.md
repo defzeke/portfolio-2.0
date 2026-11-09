@@ -129,7 +129,7 @@ On phones the text layer starts at `mt-[47svh]`, leaving the top ~40% for the ch
 - Panel gaps: `gap-8` / `gap-10` in dashboard grids, `space-y-3` inside definition lists.
 - Section separation: `border-t border-line pt-5` for fact rows, `divide-y divide-line` for lists.
 - Buttons: `gap-3`, `mt-8` / `mt-9` from the preceding paragraph.
-- Navbar: `h-16`; dashboard title bar `px-5 py-3`.
+- Navbar: `h-12` pills, `pt-3` from the top (clears `pt-16` content); dashboard title bar `px-5 py-3`.
 
 ### 3.3 Radii
 

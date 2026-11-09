@@ -291,22 +291,39 @@ function Projects({ onInsight }: { onInsight?: Insight }) {
             const Card = p.href ? "a" : "div";
             return (
             <Card key={p.title} {...(p.href ? { href: p.href, ...external } : {})} className="group flex flex-col">
-              <Preview href={p.href} image={p.image} focus={p.focus} />
+              {/* Hover: the card lifts, a gradient rises from the bottom so the screenshot still shows,
+                  the description slides up over it and a status chip drops in. Touch screens (no hover)
+                  get the description below the card instead. */}
+              <div className="relative rounded-xl transition-[transform,box-shadow] duration-300 ease-out group-hover:-translate-y-1 group-hover:shadow-[0_22px_40px_-22px_rgba(11,31,20,0.55)] group-focus-visible:-translate-y-1 motion-reduce:transform-none">
+                <Preview href={p.href} image={p.image} focus={p.focus} />
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl [@media(hover:none)]:hidden"
+                >
+                  <div className="absolute inset-0 bg-linear-to-t from-brand-900/95 via-brand-900/60 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100" />
+                  <span className="absolute right-3 top-3 inline-flex -translate-y-1 items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-xs font-medium text-brand-900 opacity-0 shadow-sm transition duration-300 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
+                    {p.href ? (
+                      <>
+                        Visit site
+                        <Icon d="M7 17 17 7M8 7h9v9" />
+                      </>
+                    ) : (
+                      "Coming soon"
+                    )}
+                  </span>
+                  <p className="absolute inset-x-0 bottom-0 line-clamp-4 translate-y-3 p-4 text-[13px] leading-5 text-white opacity-0 transition duration-300 delay-75 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
+                    {p.body}
+                  </p>
+                </div>
+              </div>
               <p className="mt-4 flex flex-wrap gap-x-2 text-xs font-medium uppercase tracking-wider text-brand-700">
                 {p.categories.join(" · ")}
                 <span className="font-normal normal-case tracking-normal text-muted">
                   {p.href ? p.date : "Coming soon"}
                 </span>
               </p>
-              <h3 className="mt-1 flex items-center gap-1.5 font-semibold text-ink transition-colors group-hover:text-brand-700">
-                {p.title}
-                {p.href && (
-                  <span className="opacity-0 transition-opacity group-hover:opacity-100">
-                    <Icon d="M7 17 17 7M8 7h9v9" />
-                  </span>
-                )}
-              </h3>
-              <p className="mt-1 text-sm leading-6 text-muted">{p.body}</p>
+              <h3 className="mt-1 font-semibold text-ink transition-colors group-hover:text-brand-700">{p.title}</h3>
+              <p className="mt-1 text-sm leading-6 text-muted [@media(hover:hover)]:sr-only">{p.body}</p>
               {p.award && <p className="mt-2 text-sm font-medium text-ink">{p.award}</p>}
               <p className="mt-2 text-xs text-muted">{p.tags.join(" · ")}</p>
             </Card>
@@ -342,14 +359,8 @@ function Experience({ onInsight }: { onInsight?: Insight }) {
     onInsight?.(f === "All" ? "experience" : `experience:${f}`);
   };
   const shown = filter === "All" ? timeline : timeline.filter((e) => e.category === filter);
-
-  // Sorted newest-first, so consecutive entries share a year and the groups stay in order.
-  const years: { year: string; items: typeof experience }[] = [];
-  for (const e of shown) {
-    const y = startYear(e.period);
-    if (years.at(-1)?.year !== y) years.push({ year: y, items: [] });
-    years.at(-1)!.items.push(e);
-  }
+  const now = shown.filter((e) => e.current);
+  const before = shown.filter((e) => !e.current);
 
   return (
     <div>
@@ -374,65 +385,72 @@ function Experience({ onInsight }: { onInsight?: Insight }) {
       {shown.length === 0 ? (
         <Empty>Nothing in {filter} yet.</Empty>
       ) : (
-        <div className="mt-8 space-y-10">
-          {years.map(({ year, items }) => (
-            <section key={year} aria-labelledby={`exp-${year}`}>
-              {/* Year marker: centred on the rail when the timeline alternates, left-aligned when narrow. */}
-              <div className="mb-6 flex items-center gap-3">
-                <span aria-hidden className="hidden h-px flex-1 bg-line @2xl:block" />
-                <h3
-                  id={`exp-${year}`}
-                  className="rounded-full bg-card px-3 py-1 font-display text-base font-bold tabular-nums text-ink ring-1 ring-line"
-                >
-                  {year}
-                </h3>
-                <span aria-hidden className="h-px flex-1 bg-line" />
-              </div>
-              <div className="relative">
-              {/* The rail: down the left on narrow panels, down the middle once there is room to alternate. */}
-              <span aria-hidden className="absolute inset-y-0 left-[4px] w-px bg-line @2xl:left-1/2 @2xl:-translate-x-1/2" />
-              <ol className="relative space-y-8">
-                {items.map((e, i) => {
-                  const left = i % 2 === 0;
+        <div className="mt-6 space-y-8">
+          {/* What I'm doing right now, as cards: the first thing a recruiter wants to know. */}
+          {now.length > 0 && (
+            <section aria-labelledby="exp-now">
+              <h3 id="exp-now" className="text-xs font-medium uppercase tracking-wider text-muted">
+                Right now
+              </h3>
+              <ul className="mt-3 grid gap-3 @xl:grid-cols-2">
+                {now.map((e) => (
+                  <li key={e.role + e.org + e.period} className="rounded-xl bg-surface p-4 ring-1 ring-line">
+                    <div className="flex items-start justify-between gap-3">
+                      <h4 className="font-semibold text-ink">{e.role}</h4>
+                      {filter === "All" && <Tag>{e.category}</Tag>}
+                    </div>
+                    <p className="mt-0.5 text-sm text-muted">{e.org}</p>
+                    <p className="mt-3 flex items-center gap-2 text-xs font-medium tabular-nums text-brand-700">
+                      <span aria-hidden className="relative flex size-2">
+                        <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand-500/60 motion-reduce:animate-none" />
+                        <span className="relative inline-flex size-2 rounded-full bg-brand-600" />
+                      </span>
+                      {e.period}
+                    </p>
+                    {e.detail && <p className="mt-2 text-sm leading-6 text-ink/80">{e.detail}</p>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Everything before, newest first; the year sits in the gutter on its first row only. */}
+          {before.length > 0 && (
+            <section aria-labelledby="exp-before">
+              <h3 id="exp-before" className="text-xs font-medium uppercase tracking-wider text-muted">
+                {now.length > 0 ? "Before that" : "Experience"}
+              </h3>
+              <ol className="mt-3 border-t border-line">
+                {before.map((e, i) => {
+                  const year = startYear(e.period);
+                  const firstOfYear = year !== startYear(before[i - 1]?.period ?? "");
                   return (
                     <li
                       key={e.role + e.org + e.period}
-                      className="relative grid grid-cols-[9px_1fr] gap-x-5 @2xl:grid-cols-[1fr_9px_1fr] @2xl:gap-x-8"
+                      className={`grid grid-cols-[3.5rem_1fr] gap-x-4 py-3.5 @md:grid-cols-[4.5rem_1fr] ${
+                        firstOfYear && i > 0 ? "border-t border-line" : ""
+                      }`}
                     >
-                      {/* Node on the rail: filled while the role is ongoing. */}
-                      <span
-                        aria-hidden
-                        className={`col-start-1 row-start-1 mt-[4px] size-[9px] rounded-full @2xl:col-start-2 ${
-                          e.current ? "bg-brand-600 ring-4 ring-brand-50" : "border border-muted/60 bg-card"
-                        }`}
-                      />
-                      <div
-                        className={`col-start-2 row-start-1 ${
-                          left ? "@2xl:col-start-1 @2xl:text-right" : "@2xl:col-start-3"
-                        }`}
-                      >
-                        <p className="text-xs font-medium tabular-nums text-brand-700">
-                          {e.period}
-                          {e.current && <span className="sr-only"> (current)</span>}
-                        </p>
-                        <h4 className="mt-0.5 font-semibold text-ink">{e.role}</h4>
-                        <p className="mt-0.5 text-sm text-muted">
+                      <span className="pt-0.5 font-display text-sm font-bold tabular-nums text-ink/40">
+                        {firstOfYear ? year : ""}
+                      </span>
+                      <div>
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                          <h4 className="font-semibold text-ink">{e.role}</h4>
+                          <span className="text-xs tabular-nums text-muted">{e.period}</span>
+                        </div>
+                        <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-muted">
                           {e.org}
-                          {filter === "All" && <span className="text-muted/70"> · {e.category}</span>}
+                          {filter === "All" && <Tag>{e.category}</Tag>}
                         </p>
-                        {e.detail && (
-                          <p className={`mt-1.5 max-w-[48ch] text-sm leading-6 text-ink/80 ${left ? "@2xl:ml-auto" : ""}`}>
-                            {e.detail}
-                          </p>
-                        )}
+                        {e.detail && <p className="mt-1.5 max-w-[60ch] text-sm leading-6 text-ink/80">{e.detail}</p>}
                       </div>
                     </li>
                   );
                 })}
               </ol>
-              </div>
             </section>
-          ))}
+          )}
         </div>
       )}
     </div>
@@ -634,6 +652,14 @@ function Filters<T extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 ring-1 ring-brand-100">
+      {children}
+    </span>
   );
 }
 
